@@ -59,6 +59,14 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x):
         return (self.weight * self.norm(x.float())).type_as(x)
 
+
+class mHC字节_ds(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-5):
+        super().__init__()
+    def forward(self, x):
+        pass
+
+
 def precompute_freqs_cis(dim: int, end: int = int(32 * 1024), rope_base: float = 1e6, rope_scaling: dict = None):
     freqs, attn_factor = 1.0 / (rope_base ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim)), 1.0
     if rope_scaling is not None: # YaRN: f'(i) = f(i)((1-γ) + γ/s), where γ∈[0,1] is linear ramp
