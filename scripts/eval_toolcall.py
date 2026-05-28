@@ -11,8 +11,8 @@ import torch
 from datetime import datetime
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextStreamer
 from openai import OpenAI
-from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
-from trainer.trainer_utils import setup_seed, get_model_params
+from model.model_minimind import MiniMindConfig, MiniMindForCausalLM##===================================
+from trainer.trainer_utils import setup_seed, get_model_params##===================================
 warnings.filterwarnings('ignore')
 
 TOOLS = [

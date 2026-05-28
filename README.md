@@ -752,9 +752,9 @@ python eval_llm.py --weight full_sft
 
 ```bash
 # 方式1
-torchrun --nproc_per_node 1 train_distillation.py
+torchrun --nproc_per_node 1 train_distillationBLACK.py
 # 方式2
-python train_distillation.py
+python train_distillationBLACK.py
 ```
 
 ### 4' LoRA (Low-Rank Adaptation)
