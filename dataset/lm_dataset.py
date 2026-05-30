@@ -34,6 +34,8 @@ def post_processing_chat(prompt_content, empty_think_ratio=0.2):
         prompt_content = prompt_content.replace('<think>\n\n</think>\n\n', '')
     return prompt_content
 
+
+
 class PretrainDataset(Dataset):
     def __init__(self, data_path, tokenizer, max_length=512):
         super().__init__()
@@ -50,7 +52,7 @@ class PretrainDataset(Dataset):
         tokens = [self.tokenizer.bos_token_id] + tokens + [self.tokenizer.eos_token_id]
         input_ids = tokens + [self.tokenizer.pad_token_id] * (self.max_length - len(tokens))
         input_ids = torch.tensor(input_ids, dtype=torch.long)
-        labels = input_ids.clone()
+        labels = input_ids.clone()##===================================在代码里面划分【：-1】与【-：】
         labels[input_ids == self.tokenizer.pad_token_id] = -100
         return input_ids, labels
 
@@ -197,7 +199,7 @@ class RLAIFDataset(Dataset):
         super().__init__()
         self.tokenizer = tokenizer
         self.max_length = max_length
-        self.thinking_ratio = thinking_ratio  # 按概率开启 thinking
+        self.thinking_ratio = thinking_ratio  # 按概率开启 thinking##===================================
         self.samples = load_dataset('json', data_files=jsonl_path, split='train')
         self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant', add_special_tokens=False).input_ids
         self.eos_id = tokenizer(f'{tokenizer.eos_token}', add_special_tokens=False).input_ids
@@ -206,23 +208,27 @@ class RLAIFDataset(Dataset):
         return len(self.samples)
 
     def create_chat_prompt(self, conversations):
-        conversations = pre_processing_chat(conversations)
-        use_thinking = random.random() < self.thinking_ratio
+        conversations = pre_processing_chat(conversations)##===================================
+        use_thinking = random.random() < self.thinking_ratio##===================================
         return self.tokenizer.apply_chat_template(
-            conversations[:-1],
+            conversations[:-1],##===================================
             tokenize=False,
             open_thinking=use_thinking,
             add_generation_prompt=True
         )
     def __getitem__(self, index):
         sample = self.samples[index]
-        prompt = self.create_chat_prompt(sample['conversations'])
+        prompt = self.create_chat_prompt(sample['conversations'])##===================================
 
         return {
             'prompt': prompt,
             'answer': ""
         }
 
+
+
+
+def ________():pass
 class AgentRLDataset(Dataset):
     def __init__(self, jsonl_path, tokenizer, max_length=1024):
         super().__init__()
@@ -231,7 +237,7 @@ class AgentRLDataset(Dataset):
         self.samples = []
         with open(jsonl_path, 'r', encoding='utf-8') as f:
             for line in f:
-                self.samples.append(json.loads(line.strip()))
+                self.samples.append(json.loads(line.strip()))##===================================
 
     def __len__(self):
         return len(self.samples)
@@ -244,13 +250,13 @@ class AgentRLDataset(Dataset):
             if message.get("role") == "system" and message.get("tools"):
                 tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]
             messages.append(message)
-        return messages[:-1], tools
-
+        return messages[:-1], tools##===================================##===================================
     def __getitem__(self, index):
         sample = self.samples[index]
-        messages, tools = self.parse_conversations(sample['conversations'])
-        return {'messages': messages, 'tools': tools, 'gt': sample['gt']}
-
-
+        messages, tools = self.parse_conversations(sample['conversations'])##===================================
+        return {'messages': messages,
+                'tools': tools,##===================================##===================================
+                'gt': sample['gt']}##===================================##===================================
 if __name__ == "__main__":
     pass
+

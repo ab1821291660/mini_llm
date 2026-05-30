@@ -200,7 +200,7 @@ class MiniMindBlock(nn.Module):
         hidden_states += residual
         hidden_states = hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
         return hidden_states, present_key_value
-
+def ________():pass
 class MiniMindModel(nn.Module):
     def __init__(self, config: MiniMindConfig):
         super().__init__()

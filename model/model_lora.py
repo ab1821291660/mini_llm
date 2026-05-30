@@ -10,7 +10,7 @@ class LoRA(nn.Module):
         self.A = nn.Linear(in_features, rank, bias=False)  # 低秩矩阵A
         self.B = nn.Linear(rank, out_features, bias=False)  # 低秩矩阵B
         # 矩阵A高斯初始化
-        self.A.weight.data.normal_(mean=0.0, std=0.02)
+        self.A.weight.data.normal_(mean=0.0, std=0.02)##===================================
         # 矩阵B全0初始化
         self.B.weight.data.zero_()
 
@@ -54,7 +54,7 @@ def save_lora(model, path):
 
 
 def merge_lora(model, lora_path, save_path):
-    load_lora(model, lora_path)
+    load_lora(model, lora_path)##===================================
     raw_model = getattr(model, '_orig_mod', model)
     state_dict = {k: v.cpu().half() for k, v in raw_model.state_dict().items() if '.lora.' not in k}
     for name, module in raw_model.named_modules():
@@ -62,4 +62,4 @@ def merge_lora(model, lora_path, save_path):
             state_dict[f'{name}.weight'] = module.weight.data.clone().cpu().half()
             if hasattr(module, 'lora'):
                 state_dict[f'{name}.weight'] += (module.lora.B.weight.data @ module.lora.A.weight.data).cpu().half()
-    torch.save(state_dict, save_path)
+    torch.save(state_dict, save_path)##===================================
