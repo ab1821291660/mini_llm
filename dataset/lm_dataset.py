@@ -30,7 +30,7 @@ def pre_processing_chat(conversations, add_system_ratio=0.2):
 
 def post_processing_chat(prompt_content, empty_think_ratio=0.2):
     # 以80%概率移除空思考标签
-    if '<think>\n\n</think>\n\n' in prompt_content and random.random() > empty_think_ratio:
+    if '<think>\n\n</think>\n\n' in prompt_content and random.random() > empty_think_ratio:##===================================
         prompt_content = prompt_content.replace('<think>\n\n</think>\n\n', '')
     return prompt_content
 
@@ -57,6 +57,19 @@ class PretrainDataset(Dataset):
         return input_ids, labels
 
 
+
+##覆盖的内容：
+# 该区间包含了 assistant 角色输出的所有内容：可能包括 think 标签内的推理内容、tool_call 工具调用、最终的文本回答，以及这条消息结尾的 <|im_end|> 标记。
+# 如果对话中有多个 assistant 消息，那么每个 assistant 消息对应的区间都会被标记为非 -100。
+#
+# 不包含的部分：
+# system、user、tool 角色的消息不会被标记为需要预测的目标（其标签保持 -100），因为它们只作为模型输入的上下文，而不要求模型生成。
+#
+# 结合你的示例数据：
+# 示例中有两次 assistant 消息：
+# 第一次：{"role": "assistant", "content": "", "tool_calls": [...]} → 模型输出的是 <tool_call> 标签内的 JSON。
+# 第二次：{"role": "assistant", "content": "Hello World"} → 模型输出的是最终回答。
+# 这两次 assistant 输出的整个片段（包括结尾的 <|im_end|>）都会在 labels 中对应为非 -100 的位置。
 class SFTDataset(Dataset):
     def __init__(self, jsonl_path, tokenizer, max_length=1024):
         super().__init__()
@@ -72,7 +85,7 @@ class SFTDataset(Dataset):
 
     def create_chat_prompt(self, conversations):
         messages = []
-        tools = None
+        tools = None##===================================
         for message in conversations:
             message = dict(message)
             if message.get("role") == "system" and message.get("tools"):
@@ -84,10 +97,9 @@ class SFTDataset(Dataset):
             messages,
             tokenize=False,
             add_generation_prompt=False,
-            tools=tools
+            tools=tools##===================================
         )
-
-    def generate_labels(self, input_ids):
+    def generate_labels(self, input_ids):#bos_i与eos_id
         labels = [-100] * len(input_ids)
         i = 0
         while i < len(input_ids):
@@ -104,15 +116,14 @@ class SFTDataset(Dataset):
             else:
                 i += 1
         return labels
-
     def __getitem__(self, index):
         sample = self.samples[index]
-        conversations = pre_processing_chat(sample['conversations'])
-        prompt = self.create_chat_prompt(conversations)
-        prompt = post_processing_chat(prompt)
+        conversations = pre_processing_chat(sample['conversations'])##========
+        prompt = self.create_chat_prompt(conversations)##===================================
+        prompt = post_processing_chat(prompt)##========
         input_ids = self.tokenizer(prompt).input_ids[:self.max_length]
         input_ids += [self.tokenizer.pad_token_id] * (self.max_length - len(input_ids))
-        labels = self.generate_labels(input_ids)
+        labels = self.generate_labels(input_ids)##===================================
         # # === 调试打印 ===
         # print(f"\n--- Sample {index} ---")
         # for i, (x, y) in enumerate(zip(input_ids[:-1], labels[1:])):
