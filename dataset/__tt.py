@@ -76,13 +76,29 @@ if torch.cuda.is_available():
 # pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu124
 #
 #
-# ##===================================
-# ##===================================
+# # ##===================================
+# # ##===================================
+# # ##===================================
 # 当前 sft_t2t / sft_t2t_mini 已经混入 Tool Call 数据，因此通常不需要再额外做一轮独立的 Tool Calling 监督微调。
+# web_demo为sft的hug格式_但也支持reasoning_content-tool_calls-open_thinking
 
 
-# ##===================================
-# ##===================================
-# # 部署时
-# pip install pydantic  -i https://mirrors.aliyun.com/pypi/simple
+# # ##===================================
+# # ##===================================
+# # ##===================================
+# # # 部署时
+# modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./rewardmodel
+# # pip install pydantic  -i https://mirrors.aliyun.com/pypi/simple
+# pip install streamlit  -i https://mirrors.aliyun.com/pypi/simple
+
+
+# 3'（可选）WebUI
+# # 可能需要`python>=3.10`，安装 `pip install streamlit`
+# # ⚠️ 须先将 transformers 格式模型文件夹复制到 ./scripts/ 目录下（例如：cp -r minimind-3 ./scripts/minimind-3），web_demo 脚本会自动扫描该目录下包含权重文件的子文件夹，如不存在则报错
+# cd scripts && streamlit run web_demo.py
+# 右击运行web_demo.py不可
+#   Local URL: http://localhost:8501
+#   Network URL: http://192.168.1.143:8501
+
+
 
