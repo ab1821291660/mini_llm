@@ -267,7 +267,7 @@ class AgentRLDataset(Dataset):
         messages, tools = self.parse_conversations(sample['conversations'])##===================================
         return {'messages': messages,
                 'tools': tools,##===================================##===================================
-                'gt': sample['gt']}##===================================##===================================
+                'gt': sample['gt']}##===================================
 if __name__ == "__main__":
     pass
 

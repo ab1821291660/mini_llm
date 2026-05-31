@@ -242,4 +242,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     device = args.device
     model, tokenizer = init_model(args)
-    uvicorn.run(app, host="0.0.0.0", port=8998)
+    # uvicorn.run(app, host="0.0.0.0", port=8998)
+    uvicorn.run(app, host="0.0.0.0", port=11434)

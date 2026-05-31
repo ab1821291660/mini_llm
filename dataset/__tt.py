@@ -83,5 +83,6 @@ if torch.cuda.is_available():
 
 # ##===================================
 # ##===================================
-
+# # 部署时
+# pip install pydantic  -i https://mirrors.aliyun.com/pypi/simple
 

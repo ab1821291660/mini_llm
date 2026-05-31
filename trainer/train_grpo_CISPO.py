@@ -59,7 +59,7 @@ def calculate_rewards(prompts, responses, reward_model):
                     answer = answer_content.strip()
                 rewards[response_idx] -= rep_penalty(answer)
 
-                score = reward_model.get_score(messages, answer)
+                score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./rewardmodel
                 reward_model_scores.append(score)
 
         reward_model_scores = torch.tensor(reward_model_scores, device=args.device)

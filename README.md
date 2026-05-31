@@ -752,9 +752,9 @@ python eval_llm.py --weight full_sft
 
 ```bash
 # 方式1
-torchrun --nproc_per_node 1 train_distillationBLACK.py
+torchrun --nproc_per_node 1 train_distillation白盒蒸馏.py
 # 方式2
-python train_distillationBLACK.py
+python train_distillation白盒蒸馏.py
 ```
 
 ### 4' LoRA (Low-Rank Adaptation)
@@ -1139,9 +1139,9 @@ GRPO 更显著的问题是退化组（Degenerate Groups）：如果某个问题�
 
 ```bash
 # 方式1
-torchrun --nproc_per_node N train_grpo.py
+torchrun --nproc_per_node N train_grpo_CISPO.py
 # 方式2
-python train_grpo.py
+python train_grpo_CISPO.py
 ```
 
 > 训练后的模型权重文件默认每隔`save_interval步`保存为: `grpo_*.pth`

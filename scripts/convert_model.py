@@ -130,7 +130,8 @@ if __name__ == '__main__':
 
     # convert torch to transformers
     torch_path = f"../out/full_sft_{lm_config.hidden_size}{'_moe' if lm_config.use_moe else ''}.pth"
-    transformers_path = '../minimind-3'
+    transformers_path = '../minimind-3'##===================================
+    # transformers_path = '../minimind-3-moe'##===================================
     convert_torch2transformers(torch_path, transformers_path)
 
     # # merge lora
