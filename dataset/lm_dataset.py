@@ -153,7 +153,6 @@ class DPODataset(Dataset):
             chosen, tokenize=False, add_generation_prompt=False
         )
         chosen_prompt = post_processing_chat(chosen_prompt)
-
         rejected_prompt = self.tokenizer.apply_chat_template(
             rejected, tokenize=False, add_generation_prompt=False
         )
@@ -165,18 +164,19 @@ class DPODataset(Dataset):
             rejected_prompt, truncation=True, max_length=self.max_length, padding='max_length'
         )
 
+
         chosen_input_ids = chosen_encoding['input_ids']
         chosen_loss_mask = self.generate_loss_mask(chosen_input_ids)
-
         rejected_input_ids = rejected_encoding['input_ids']
         rejected_loss_mask = self.generate_loss_mask(rejected_input_ids)
+
+
         x_chosen = torch.tensor(chosen_input_ids[:-1], dtype=torch.long)
         y_chosen = torch.tensor(chosen_input_ids[1:], dtype=torch.long)
         mask_chosen = torch.tensor(chosen_loss_mask[1:], dtype=torch.long)
         x_rejected = torch.tensor(rejected_input_ids[:-1], dtype=torch.long)
         y_rejected = torch.tensor(rejected_input_ids[1:], dtype=torch.long)
         mask_rejected = torch.tensor(rejected_loss_mask[1:], dtype=torch.long)
-
         return {
             'x_chosen': x_chosen,
             'y_chosen': y_chosen,

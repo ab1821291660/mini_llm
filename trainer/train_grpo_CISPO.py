@@ -32,8 +32,6 @@ def rep_penalty(text, n=3, cap=0.5):
     toks = re.findall(r"\w+|[^\w\s]", text.lower())
     grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
     return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
-
-
 def calculate_rewards(prompts, responses, reward_model):
     rewards = torch.zeros(len(responses), device=args.device)
 
@@ -57,7 +55,7 @@ def calculate_rewards(prompts, responses, reward_model):
                     rewards[response_idx] += 1.0 if 20 <= len(thinking_content.strip()) <= 300 else -0.5
                     rewards[response_idx] += 0.25 if response.count('</think>') == 1 else -0.25
                     answer = answer_content.strip()
-                rewards[response_idx] -= rep_penalty(answer)
+                rewards[response_idx] -= rep_penalty(answer)##===================================#
 
                 score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
                 reward_model_scores.append(score)
@@ -77,8 +75,9 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
             prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -args.max_seq_len:]
             prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -args.max_seq_len:]
 
-        rollout_result = rollout_engine.rollout(
-            prompt_ids=prompt_inputs["input_ids"],
+
+        rollout_result = rollout_engine.rollout(##===================================##===================================
+            prompt_ids=prompt_inputs["input_ids"],##===================================##===================================##===================================##===================================
             attention_mask=prompt_inputs["attention_mask"],
             num_generations=args.num_generations,
             max_new_tokens=args.max_gen_len,
@@ -86,14 +85,30 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         )
         outputs = rollout_result.output_ids
         completion_ids = rollout_result.completion_ids
-        completions = rollout_result.completions
-        old_per_token_logps = rollout_result.per_token_logps.to(args.device).detach()
-        prompt_lens = rollout_result.prompt_lens.to(args.device)
+        completions = rollout_result.completions##===================================##===================================##===================================##===================================
+        old_per_token_logps = rollout_result.per_token_logps.to(args.device).detach()##===================================
+        prompt_lens = rollout_result.prompt_lens.to(args.device)##===================================
         full_mask = (outputs != tokenizer.pad_token_id).long()
         logp_pos = prompt_lens.unsqueeze(1) - 1 + torch.arange(completion_ids.size(1), device=args.device).unsqueeze(0)
 
-        rewards = calculate_rewards(prompts, completions, reward_model).to(args.device)  # [B*num_gen]
 
+
+
+                                    #原prompts #第1次的预测 #奖励模型
+        rewards = calculate_rewards(prompts, completions, reward_model).to(args.device)  # [B*num_gen]##===================================##===================================
+
+
+
+
+        grouped_rewards = rewards.view(-1, args.num_generations)  # [B, num_gen]
+        # mean_r = grouped_rewards.mean(dim=1)
+        mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)  # [B*num_gen]
+        std_r = grouped_rewards.std(dim=1, unbiased=False).repeat_interleave(args.num_generations)  # [B*num_gen]
+        advantages = (rewards - mean_r) / (std_r + 1e-4)  # [B*num_gen]
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
         model_unwrapped = model.module if isinstance(model, DistributedDataParallel) else model
         with autocast_ctx:
             res = model_unwrapped(outputs, attention_mask=full_mask)
@@ -118,10 +133,7 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
                     Logger(f"[DEBUG] gen[{j}] reward={rewards[idx].item():.4f}")
                 Logger('='*100)
 
-        grouped_rewards = rewards.view(-1, args.num_generations)  # [B, num_gen]
-        mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)  # [B*num_gen]
-        std_r = grouped_rewards.std(dim=1, unbiased=False).repeat_interleave(args.num_generations)  # [B*num_gen]
-        advantages = (rewards - mean_r) / (std_r + 1e-4)  # [B*num_gen]
+
 
         completion_pad_mask = rollout_result.completion_mask.to(args.device).bool()
         is_eos = (completion_ids == tokenizer.eos_token_id) & completion_pad_mask  # [B*num_gen, R]
@@ -134,15 +146,21 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         ratio = torch.exp(per_token_logps - old_per_token_logps)  # [B*num_gen, R]
         if args.loss_type == "cispo":
             clamped_ratio = torch.clamp(ratio, max=args.epsilon_high).detach()
-            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps - args.beta * per_token_kl)
-        else:
+            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps  - args.beta * per_token_kl)##===================================
+        else:#grpo
             clipped_ratio = torch.clamp(ratio, 1 - args.epsilon, 1 + args.epsilon)
             per_token_loss1 = ratio * advantages.unsqueeze(1)
             per_token_loss2 = clipped_ratio * advantages.unsqueeze(1)
-            per_token_loss = -(torch.min(per_token_loss1, per_token_loss2) - args.beta * per_token_kl)
+            per_token_loss = -(torch.min(per_token_loss1, per_token_loss2)  - args.beta * per_token_kl)##===================================
+        # else:#grpo
+        # else:#grpo
+        # else:#grpo
+        # else:#grpo
         policy_loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1).clamp(min=1)).mean()
-        loss = (policy_loss + aux_loss) / args.accumulation_steps  # scalar
+        loss = (policy_loss + aux_loss) / args.accumulation_steps  # scalar ##===================================
         loss.backward()
+
+
 
         if step % args.accumulation_steps == 0:
             if args.grad_clip > 0:
@@ -152,13 +170,16 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
             optimizer.zero_grad()
 
         if step % args.log_interval == 0 or step == iters:
-            policy_loss_val = loss.item() * args.accumulation_steps
+            policy_loss_val = loss.item() * args.accumulation_steps##===================================
             current_aux_loss = aux_loss.item()
-            avg_reward_val = rewards.mean().item()
-            avg_len_val = completion_mask.sum(dim=1).float().mean().item()
             kl_ref_val = ((ref_per_token_logps - per_token_logps) * completion_mask).sum().item() / max(completion_mask.sum().item(), 1)
+            ##
+            avg_reward_val = rewards.mean().item()
+            ##
             advantages_mean_val = advantages.mean().item()
             advantages_std_val = advantages.std().item()
+            ##
+            avg_len_val = completion_mask.sum(dim=1).float().mean().item()
             current_lr = optimizer.param_groups[0]['lr']
 
             Logger(f'Epoch:[{epoch + 1}/{args.epochs}]({step}/{iters}), '
@@ -173,6 +194,7 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
                     "advantages_std": advantages_std_val,
                     "advantages_mean": advantages_mean_val,
                     "policy_loss": policy_loss_val,
+                    ##
                     "avg_response_len": avg_len_val,
                     "learning_rate": current_lr
                 })
@@ -219,25 +241,28 @@ if __name__ == "__main__":
     parser.add_argument("--save_interval", type=int, default=10, help="模型保存间隔")
     parser.add_argument('--hidden_size', default=768, type=int, help="隐藏层维度")
     parser.add_argument('--num_hidden_layers', default=8, type=int, help="隐藏层数量")
-    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")
-    parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")
-    parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")
-    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")
-    parser.add_argument("--num_generations", type=int, default=6, help="每个prompt生成的样本数")
-    parser.add_argument("--beta", type=float, default=0.1, help="KL惩罚系数")
-    parser.add_argument("--loss_type", type=str, default="cispo", choices=["grpo", "cispo"], help="loss类型")
-    parser.add_argument("--epsilon", type=float, default=0.2, help="GRPO的PPO clip epsilon")
-    parser.add_argument("--epsilon_high", type=float, default=5.0, help="epsilon上界")
-    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")
-    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
-    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
+    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
+    parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")##===================================
+    parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")##===================================
+    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")##===================================
+    parser.add_argument("--num_generations", type=int, default=6, help="每个prompt生成的样本数")##===================================
+    parser.add_argument("--beta", type=float, default=0.1, help="KL惩罚系数")##===================================
+    parser.add_argument("--loss_type", type=str, default="cispo", choices=["grpo", "cispo"], help="loss类型")##===================================##===================================
+    parser.add_argument("--epsilon", type=float, default=0.2, help="GRPO的PPO clip epsilon")##===================================
+    parser.add_argument("--epsilon_high", type=float, default=5.0, help="epsilon上界")##===================================
+    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
+    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-GRPO", help="wandb项目名")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")
-    parser.add_argument("--debug_mode", action="store_true", help="是否打印训练调试采样")
-    parser.add_argument("--debug_interval", type=int, default=20, help="debug模式下每隔多少step打印一次采样")
-    parser.add_argument("--thinking_ratio", type=float, default=0.9, help="按概率开启thinking（0.0~1.0）")
-    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")
+    parser.add_argument("--debug_mode", action="store_true", help="是否打印训练调试采样")##===================================
+    parser.add_argument("--debug_interval", type=int, default=20, help="debug模式下每隔多少step打印一次采样")##===================================
+    parser.add_argument("--thinking_ratio", type=float, default=0.9, help="按概率开启thinking（0.0~1.0）")##===================================
+
+
+    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")##===================================##===================================
     parser.add_argument("--sglang_base_url", type=str, default="http://localhost:8998", help="SGLang服务器URL")
     parser.add_argument("--sglang_model_path", type=str, default="../model", help="SGLang tokenizer路径")
     parser.add_argument("--sglang_shared_path", type=str, default="./sglang_ckpt_grpo", help="SGLang共享存储路径")
@@ -251,8 +276,8 @@ if __name__ == "__main__":
     # ========== 2. 配置目录、模型参数、检查ckp ==========
     os.makedirs(args.save_dir, exist_ok=True)
     lm_config = MiniMindConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers,
-                               max_seq_len=args.max_seq_len + args.max_gen_len, use_moe=bool(args.use_moe))
-    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume==1 else None
+                               max_seq_len=args.max_seq_len + args.max_gen_len, use_moe=bool(args.use_moe))##===================================  ##===================================
+    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume==1 else None##===================================##===================================
     
     # ========== 3. 设置混合精度 ==========
     device_type = "cuda" if "cuda" in args.device else "cpu"
@@ -271,15 +296,19 @@ if __name__ == "__main__":
     # ========== 5. 初始化模型和数据 ==========
     base_weight = args.from_weight
     # Policy模型
-    model, tokenizer = init_model(lm_config, base_weight, device=args.device)
+    model, tokenizer = init_model(lm_config, base_weight, device=args.device)##===================================
     # Reference模型
-    ref_model, _ = init_model(lm_config, base_weight, device=args.device)
+    ref_model, _ = init_model(lm_config, base_weight, device=args.device)##===================================
     ref_model = ref_model.eval().requires_grad_(False)
-    # Reward模型
-    reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)
+
+
+    # Reward模型=="../../internlm2-1_8b-reward", help="Reward模型路径"
+    reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)##===================================
+
+
     # Rollout引擎（可插拔替换，只负责 policy 推理）
     rollout_engine = create_rollout_engine(
-        engine_type=args.rollout_engine,
+        engine_type=args.rollout_engine,#["torch", "sglang"]##===================================##===================================
         policy_model=model,
         tokenizer=tokenizer,
         device=args.device,
@@ -288,9 +317,17 @@ if __name__ == "__main__":
         sglang_model_path=args.sglang_model_path,
         sglang_shared_path=args.sglang_shared_path,
     )
+
+
+
+
     # 数据和优化器
     train_ds = RLAIFDataset(args.data_path, tokenizer, max_length=lm_config.max_seq_len, thinking_ratio=args.thinking_ratio)
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+
+
+
+
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
     loader_for_count = DataLoader(train_ds, batch_size=args.batch_size, sampler=train_sampler)
     iters = len(loader_for_count)
@@ -310,10 +347,10 @@ if __name__ == "__main__":
     if args.use_compile == 1:
         model = torch.compile(model)
         Logger('torch.compile enabled')
-        rollout_engine.update_policy(model)
+        rollout_engine.update_policy(model)##===================================##===================================
     if dist.is_initialized():
         model = DistributedDataParallel(model, device_ids=[local_rank])
-    rollout_engine.update_policy(model)
+    rollout_engine.update_policy(model)##===================================##===================================
     
     # ========== 8. 开始训练 ==========
     for epoch in range(start_epoch, args.epochs):

@@ -38,10 +38,10 @@ def dpo_loss(ref_log_probs, policy_log_probs, mask, beta):
 
     # 将 chosen 和 rejected 数据分开
     batch_size = ref_log_probs.shape[0]
-    chosen_ref_log_probs = ref_log_probs[:batch_size // 2]
-    reject_ref_log_probs = ref_log_probs[batch_size // 2:]
-    chosen_policy_log_probs = policy_log_probs[:batch_size // 2]
-    reject_policy_log_probs = policy_log_probs[batch_size // 2:]
+    chosen_ref_log_probs = ref_log_probs[:batch_size // 2]##===================================
+    reject_ref_log_probs = ref_log_probs[batch_size // 2:]##===================================
+    chosen_policy_log_probs = policy_log_probs[:batch_size // 2]##===================================
+    reject_policy_log_probs = policy_log_probs[batch_size // 2:]##===================================
 
     pi_logratios = chosen_policy_log_probs - reject_policy_log_probs
     ref_logratios = chosen_ref_log_probs - reject_ref_log_probs
@@ -57,14 +57,16 @@ def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=
     for step, batch in enumerate(loader, start=start_step + 1):
         last_step = step
         x_chosen = batch['x_chosen'].to(args.device)
-        x_rejected = batch['x_rejected'].to(args.device)
         y_chosen = batch['y_chosen'].to(args.device)
-        y_rejected = batch['y_rejected'].to(args.device)
         mask_chosen = batch['mask_chosen'].to(args.device)
+        x_rejected = batch['x_rejected'].to(args.device)
+        y_rejected = batch['y_rejected'].to(args.device)
         mask_rejected = batch['mask_rejected'].to(args.device)
-        x = torch.cat([x_chosen, x_rejected], dim=0)
-        y = torch.cat([y_chosen, y_rejected], dim=0)
-        mask = torch.cat([mask_chosen, mask_rejected], dim=0)
+        x = torch.cat([x_chosen, x_rejected], dim=0)##===================================
+        y = torch.cat([y_chosen, y_rejected], dim=0)##===================================
+        mask = torch.cat([mask_chosen, mask_rejected], dim=0)##===================================
+
+
 
         lr = get_lr(epoch * iters + step, args.epochs * iters, args.learning_rate)
         for param_group in optimizer.param_groups:
@@ -72,18 +74,19 @@ def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=
 
         with autocast_ctx:
             with torch.no_grad():
-                ref_outputs = ref_model(x)
+                ref_outputs = ref_model(x)##===================================
                 ref_logits = ref_outputs.logits
-            ref_log_probs = logits_to_log_probs(ref_logits, y)
+            ref_log_probs = logits_to_log_probs(ref_logits, y)##===================================
             
-            outputs = model(x)
+            outputs = model(x)##===================================
             logits = outputs.logits
-            policy_log_probs = logits_to_log_probs(logits, y)
-            
-            dpo_loss_val = dpo_loss(ref_log_probs, policy_log_probs, mask, beta=beta)
+            policy_log_probs = logits_to_log_probs(logits, y)##===================================
+
+
+
+            dpo_loss_val = dpo_loss(ref_log_probs, policy_log_probs, mask, beta=beta)##===================================##===================================
             loss = dpo_loss_val + outputs.aux_loss
             loss = loss / args.accumulation_steps
-
         scaler.scale(loss).backward()
 
         if step % args.accumulation_steps == 0:
@@ -95,7 +98,7 @@ def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=
 
         if step % args.log_interval == 0 or step == iters:
             spend_time = time.time() - start_time
-            current_loss = loss.item() * args.accumulation_steps
+            current_loss = loss.item() * args.accumulation_steps##===================================
             current_dpo_loss = dpo_loss_val.item()
             current_aux_loss = outputs.aux_loss.item()
             current_lr = optimizer.param_groups[-1]['lr']
@@ -145,10 +148,10 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_size', default=768, type=int, help="隐藏层维度")
     parser.add_argument('--num_hidden_layers', default=8, type=int, help="隐藏层数量")
     parser.add_argument('--max_seq_len', default=1024, type=int, help="训练的最大截断长度（中文1token≈1.5~1.7字符）")
-    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")
-    parser.add_argument("--data_path", type=str, default="../dataset/dpo.jsonl", help="DPO训练数据路径")
-    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")
-    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
+    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
+    parser.add_argument("--data_path", type=str, default="../dataset/dpo.jsonl", help="DPO训练数据路径")##===================================
+    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
+    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument('--beta', default=0.15, type=float, help="DPO中的beta参数")
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-DPO", help="wandb项目名")
@@ -163,7 +166,7 @@ if __name__ == "__main__":
     # ========== 2. 配置目录、模型参数、检查ckp ==========
     os.makedirs(args.save_dir, exist_ok=True)
     lm_config = MiniMindConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers, use_moe=bool(args.use_moe))
-    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume==1 else None
+    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume==1 else None##===================================##===================================
     
     # ========== 3. 设置混合精度 ==========
     device_type = "cuda" if "cuda" in args.device else "cpu"
@@ -180,19 +183,23 @@ if __name__ == "__main__":
         wandb.init(project=args.wandb_project, name=wandb_run_name, id=wandb_id, resume=resume)
     
     # ========== 5. 定义模型和参考模型 ==========
-    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)
+    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)##===================================
     Logger(f'策略模型总参数量：{sum(p.numel() for p in model.parameters()) / 1e6:.3f} M')
     # 初始化参考模型（ref_model冻结）
-    ref_model, _ = init_model(lm_config, args.from_weight, device=args.device)
+    ref_model, _ = init_model(lm_config, args.from_weight, device=args.device)##===================================
     ref_model.eval()
     ref_model.requires_grad_(False)
     Logger(f'参考模型总参数量：{sum(p.numel() for p in ref_model.parameters()) / 1e6:.3f} M')
-    
+
+
+
     train_ds = DPODataset(args.data_path, tokenizer, max_length=args.max_seq_len)
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+
+
+
     scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16'))
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
-    
     # ========== 6. 从ckp恢复状态 ==========
     start_epoch, start_step = 0, 0
     if ckp_data:
