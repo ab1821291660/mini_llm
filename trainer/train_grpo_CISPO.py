@@ -38,7 +38,6 @@ def calculate_rewards(prompts, responses, reward_model):
     with torch.no_grad():
         reward_model_scores = []
         batch_size = len(prompts)
-
         for i in range(batch_size):
             for j in range(args.num_generations):
                 response_idx = i * args.num_generations + j
@@ -59,10 +58,8 @@ def calculate_rewards(prompts, responses, reward_model):
 
                 score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
                 reward_model_scores.append(score)
-
         reward_model_scores = torch.tensor(reward_model_scores, device=args.device)
         rewards += reward_model_scores
-
     return rewards
 
 
@@ -111,12 +108,14 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         ##===================================##===================================##===================================##===================================
         model_unwrapped = model.module if isinstance(model, DistributedDataParallel) else model
         with autocast_ctx:
-            res = model_unwrapped(outputs, attention_mask=full_mask)
+            res = model_unwrapped(outputs, attention_mask=full_mask)##===================================
             aux_loss = res.aux_loss if lm_config.use_moe else torch.tensor(0.0, device=args.device)
             per_token_logps = F.log_softmax(res.logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
 
-        with torch.no_grad():
+
+        with torch.no_grad():                   ##===================================
             ref_per_token_logps = F.log_softmax(ref_model(outputs, attention_mask=full_mask).logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
+
 
         if args.debug_mode and is_main_process() and step % args.debug_interval == 0:
             for i in range(len(prompts)):
