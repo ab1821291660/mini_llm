@@ -51,8 +51,8 @@ class PretrainDataset(Dataset):
         tokens = self.tokenizer(str(sample['text']), add_special_tokens=False, max_length=self.max_length - 2, truncation=True).input_ids
         tokens = [self.tokenizer.bos_token_id] + tokens + [self.tokenizer.eos_token_id]
         input_ids = tokens + [self.tokenizer.pad_token_id] * (self.max_length - len(tokens))
-        input_ids = torch.tensor(input_ids, dtype=torch.long)
-        labels = input_ids.clone()##===================================在代码里面划分【：-1】与【-：】
+        input_ids = torch.tensor(input_ids, dtype=torch.long)##===================================
+        labels = input_ids.clone()##===================================在代码里面划分【：-1】与【1：】
         labels[input_ids == self.tokenizer.pad_token_id] = -100
         return input_ids, labels
 
@@ -77,7 +77,7 @@ class SFTDataset(Dataset):
         self.max_length = max_length
         features = Features({'conversations': [{'role': Value('string'), 'content': Value('string'), 'reasoning_content': Value('string'), 'tools': Value('string'), 'tool_calls': Value('string')}]})
         self.samples = load_dataset('json', data_files=jsonl_path, split='train', features=features)
-        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant\n', add_special_tokens=False).input_ids
+        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant\n', add_special_tokens=False).input_ids##===================================##===================================
         self.eos_id = tokenizer(f'{tokenizer.eos_token}\n', add_special_tokens=False).input_ids
 
     def __len__(self):
@@ -88,8 +88,8 @@ class SFTDataset(Dataset):
         tools = None##===================================
         for message in conversations:
             message = dict(message)
-            if message.get("role") == "system" and message.get("tools"):
-                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]
+            if message.get("role") == "system" and message.get("tools"):##===================================
+                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]##===================================
             if message.get("tool_calls") and isinstance(message["tool_calls"], str):
                 message["tool_calls"] = json.loads(message["tool_calls"])
             messages.append(message)
@@ -103,7 +103,7 @@ class SFTDataset(Dataset):
         labels = [-100] * len(input_ids)
         i = 0
         while i < len(input_ids):
-            if input_ids[i:i + len(self.bos_id)] == self.bos_id:
+            if input_ids[i:i + len(self.bos_id)] == self.bos_id:#{tokenizer.bos_token}assistant\n'##===================================##===================================
                 start = i + len(self.bos_id)
                 end = start
                 while end < len(input_ids):
@@ -123,7 +123,8 @@ class SFTDataset(Dataset):
         prompt = post_processing_chat(prompt)##========
         input_ids = self.tokenizer(prompt).input_ids[:self.max_length]
         input_ids += [self.tokenizer.pad_token_id] * (self.max_length - len(input_ids))
-        labels = self.generate_labels(input_ids)##===================================
+        ##
+        labels = self.generate_labels(input_ids)##===================================##===================================
         # # === 调试打印 ===
         # print(f"\n--- Sample {index} ---")
         # for i, (x, y) in enumerate(zip(input_ids[:-1], labels[1:])):
@@ -138,7 +139,7 @@ class DPODataset(Dataset):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.padding = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
-        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant\n', add_special_tokens=False).input_ids
+        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant\n', add_special_tokens=False).input_ids#{tokenizer.bos_token}assistant\n'##===================================##===================================
         self.eos_id = tokenizer(f'{tokenizer.eos_token}\n', add_special_tokens=False).input_ids
         self.samples = load_dataset('json', data_files=file_path, split='train')
 
@@ -153,7 +154,6 @@ class DPODataset(Dataset):
             chosen, tokenize=False, add_generation_prompt=False
         )
         chosen_prompt = post_processing_chat(chosen_prompt)
-
         rejected_prompt = self.tokenizer.apply_chat_template(
             rejected, tokenize=False, add_generation_prompt=False
         )
@@ -164,19 +164,18 @@ class DPODataset(Dataset):
         rejected_encoding = self.tokenizer(
             rejected_prompt, truncation=True, max_length=self.max_length, padding='max_length'
         )
-
         chosen_input_ids = chosen_encoding['input_ids']
-        chosen_loss_mask = self.generate_loss_mask(chosen_input_ids)
-
+        chosen_loss_mask = self.generate_loss_mask(chosen_input_ids)##===================================
         rejected_input_ids = rejected_encoding['input_ids']
-        rejected_loss_mask = self.generate_loss_mask(rejected_input_ids)
+        rejected_loss_mask = self.generate_loss_mask(rejected_input_ids)##===================================
+
+
         x_chosen = torch.tensor(chosen_input_ids[:-1], dtype=torch.long)
         y_chosen = torch.tensor(chosen_input_ids[1:], dtype=torch.long)
         mask_chosen = torch.tensor(chosen_loss_mask[1:], dtype=torch.long)
         x_rejected = torch.tensor(rejected_input_ids[:-1], dtype=torch.long)
         y_rejected = torch.tensor(rejected_input_ids[1:], dtype=torch.long)
         mask_rejected = torch.tensor(rejected_loss_mask[1:], dtype=torch.long)
-
         return {
             'x_chosen': x_chosen,
             'y_chosen': y_chosen,
@@ -185,12 +184,11 @@ class DPODataset(Dataset):
             'y_rejected': y_rejected,
             'mask_rejected': mask_rejected
         }
-
     def generate_loss_mask(self, input_ids):
         loss_mask = [0] * len(input_ids)
         i = 0
         while i < len(input_ids):
-            if input_ids[i:i + len(self.bos_id)] == self.bos_id:
+            if input_ids[i:i + len(self.bos_id)] == self.bos_id:#{tokenizer.bos_token}assistant\n'##===================================##===================================
                 start = i + len(self.bos_id)
                 end = start
                 while end < len(input_ids):
@@ -212,7 +210,7 @@ class RLAIFDataset(Dataset):
         self.max_length = max_length
         self.thinking_ratio = thinking_ratio  # 按概率开启 thinking##===================================
         self.samples = load_dataset('json', data_files=jsonl_path, split='train')
-        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant', add_special_tokens=False).input_ids
+        self.bos_id = tokenizer(f'{tokenizer.bos_token}assistant', add_special_tokens=False).input_ids#{tokenizer.bos_token}assistant\n'##===================================##===================================
         self.eos_id = tokenizer(f'{tokenizer.eos_token}', add_special_tokens=False).input_ids
 
     def __len__(self):
@@ -255,11 +253,11 @@ class AgentRLDataset(Dataset):
 
     def parse_conversations(self, conversations):
         messages = []
-        tools = None
+        tools = None##===================================##===================================
         for message in conversations:
             message = dict(message)
             if message.get("role") == "system" and message.get("tools"):
-                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]
+                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]##===================================##===================================
             messages.append(message)
         return messages[:-1], tools##===================================##===================================
     def __getitem__(self, index):
