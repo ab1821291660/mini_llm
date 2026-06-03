@@ -65,14 +65,12 @@ def calculate_rewards(prompts, responses, reward_model):
                 rewards[i] += 1.0 if 20 <= len(thinking_content.strip()) <= 300 else -0.5
                 rewards[i] += 0.25 if response.count('</think>') == 1 else -0.25
                 answer = answer_content.strip()
-            rewards[i] -= rep_penalty(answer)
+            rewards[i] -= rep_penalty(answer)##===================================#
 
-            score = reward_model.get_score(messages, answer)
+            score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
             reward_model_scores.append(score)
-
         reward_model_scores = torch.tensor(reward_model_scores, device=args.device)
         rewards += reward_model_scores
-
     return rewards
 
 
@@ -298,7 +296,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument('--save_weight', default='ppo_actor', type=str, help="保存权重的前缀名")
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
-    parser.add_argument("--batch_size", type=int, default=2, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=2, help="batch size")##===================================##===================================##===================================##===================================
     parser.add_argument("--learning_rate", type=float, default=3e-7, help="Actor学习率")
     parser.add_argument("--critic_learning_rate", type=float, default=5e-7, help="Critic学习率")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="训练设备")
@@ -310,29 +308,33 @@ if __name__ == "__main__":
     parser.add_argument("--save_interval", type=int, default=10, help="模型保存间隔")
     parser.add_argument('--hidden_size', default=768, type=int, help="隐藏层维度")
     parser.add_argument('--num_hidden_layers', default=8, type=int, help="隐藏层数量")
-    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")
-    parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")
-    parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")
-    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")
-    parser.add_argument("--clip_epsilon", type=float, default=0.2, help="PPO裁剪参数")
-    parser.add_argument("--vf_coef", type=float, default=0.5, help="Value function系数")
-    parser.add_argument("--kl_coef", type=float, default=0.02, help="KL散度惩罚系数")
-    parser.add_argument("--gamma", type=float, default=1.0, help="GAE折扣因子")
-    parser.add_argument("--lam", type=float, default=0.95, help="GAE lambda参数")
-    parser.add_argument("--cliprange_value", type=float, default=0.2, help="Value function裁剪范围")
+    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
+    parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")##===================================
+    parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")##===================================
+    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")##===================================##===================================
+    parser.add_argument("--clip_epsilon", type=float, default=0.2, help="PPO裁剪参数")##===================================
+    parser.add_argument("--vf_coef", type=float, default=0.5, help="Value function系数")##===================================
+    parser.add_argument("--kl_coef", type=float, default=0.02, help="KL散度惩罚系数")##===================================
+    parser.add_argument("--gamma", type=float, default=1.0, help="GAE折扣因子")##===================================
+    parser.add_argument("--lam", type=float, default=0.95, help="GAE lambda参数")##===================================
+    parser.add_argument("--cliprange_value", type=float, default=0.2, help="Value function裁剪范围")##===================================
+
     parser.add_argument("--ppo_update_iters", type=int, default=2, help="同一批rollout重复更新次数")
     parser.add_argument("--early_stop_kl", type=float, default=0.25, help="PPO early stop 的 KL 阈值")
-    parser.add_argument("--mini_batch_size", type=int, default=2, help="PPO每次更新的minibatch大小")
-    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")
-    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
-    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
+    parser.add_argument("--mini_batch_size", type=int, default=2, help="PPO每次更新的minibatch大小")##===================================##===================================##===================================##===================================
+    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
+    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
+    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================
+    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-PPO", help="wandb项目名")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")
-    parser.add_argument("--debug_mode", action="store_true", help="是否打印训练调试采样")
-    parser.add_argument("--debug_interval", type=int, default=20, help="debug模式下每隔多少step打印一次采样")
-    parser.add_argument("--thinking_ratio", type=float, default=0.9, help="按概率开启thinking（0.0~1.0）")
-    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")
+    parser.add_argument("--debug_mode", action="store_true", help="是否打印训练调试采样")##===================================
+    parser.add_argument("--debug_interval", type=int, default=20, help="debug模式下每隔多少step打印一次采样")##===================================
+    parser.add_argument("--thinking_ratio", type=float, default=0.9, help="按概率开启thinking（0.0~1.0）")##===================================
+
+
+    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")##===================================
     parser.add_argument("--sglang_base_url", type=str, default="http://localhost:8998", help="SGLang服务器URL")
     parser.add_argument("--sglang_model_path", type=str, default="../model", help="SGLang tokenizer路径")
     parser.add_argument("--sglang_shared_path", type=str, default="./sglang_ckpt_ppo", help="SGLang共享存储路径")

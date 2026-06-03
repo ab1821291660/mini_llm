@@ -28,6 +28,9 @@ def train_epoch(epoch, loader, iters, lora_params, start_step=0, wandb=None):
     for step, (input_ids, labels) in enumerate(loader, start=start_step + 1):
         input_ids = input_ids.to(args.device)
         labels = labels.to(args.device)
+
+
+
         last_step = step
         lr = get_lr(epoch * iters + step, args.epochs * iters, args.learning_rate)
         for param_group in optimizer.param_groups:
@@ -98,11 +101,11 @@ if __name__ == "__main__":
     parser.add_argument('--max_seq_len', default=340, type=int, help="训练的最大截断长度（中文1token≈1.5~1.7字符）")
     parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
     parser.add_argument("--data_path", type=str, default="../dataset/lora_medical.jsonl", help="LoRA训练数据路径")##===================================
-    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练，默认full_sft")##===================================
+    parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练，默认full_sft")##===================================##===================================
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-LoRA", help="wandb项目名")
-    parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")##===================================##===================================
+    parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile加速（0=否，1=是）")##===================================
     args = parser.parse_args()
 
     # ========== 1. 初始化环境和随机种子 ==========
@@ -131,7 +134,7 @@ if __name__ == "__main__":
     
     # ========== 5. 定义模型、应用LoRA、冻结非LoRA参数 ==========
     model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)##===================================
-    apply_lora(model)
+    apply_lora(model)##===================================
     
     # 统计参数
     total_params = sum(p.numel() for p in model.parameters())
@@ -144,7 +147,7 @@ if __name__ == "__main__":
     lora_params = []
     for name, param in model.named_parameters():
         if 'lora' in name:
-            param.requires_grad = True
+            param.requires_grad = True##===================================
             lora_params.append(param)
         else:
             param.requires_grad = False##===================================
