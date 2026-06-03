@@ -22,32 +22,32 @@ from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint
 warnings.filterwarnings('ignore')
 
 
-def logits_to_log_probs(logits, labels):
+def logits_to_log_probs(logits, labels):#4*2-1023-6400  #4*2-1023
     # logits shape: (batch_size, seq_len, vocab_size)
     # labels shape: (batch_size, seq_len)
     # log_probs shape: (batch_size, seq_len)
     log_probs = F.log_softmax(logits, dim=2)
-    log_probs_per_token = torch.gather(log_probs, dim=2, index=labels.unsqueeze(2)).squeeze(-1)
-    return log_probs_per_token
+    log_probs_per_token = torch.gather(log_probs, dim=2, index=labels.unsqueeze(2)).squeeze(-1)#4*2-1023
+    return log_probs_per_token#4*2-1023
 
 
-def dpo_loss(ref_log_probs, policy_log_probs, mask, beta):
+def dpo_loss(ref_log_probs, policy_log_probs, mask, beta):#4*2-1023  #4*2-1023  #4*2-1023
     # ref_log_probs 和 policy_log_probs 都是 shape: (batch_size, seq_len)
-    ref_log_probs = (ref_log_probs * mask).sum(dim=1)
-    policy_log_probs = (policy_log_probs * mask).sum(dim=1)
+    ref_log_probs = (ref_log_probs * mask).sum(dim=1)#4*2=8
+    policy_log_probs = (policy_log_probs * mask).sum(dim=1)#4*2=8
 
     # 将 chosen 和 rejected 数据分开
     batch_size = ref_log_probs.shape[0]
-    chosen_ref_log_probs = ref_log_probs[:batch_size // 2]##===================================
-    reject_ref_log_probs = ref_log_probs[batch_size // 2:]##===================================
-    chosen_policy_log_probs = policy_log_probs[:batch_size // 2]##===================================
-    reject_policy_log_probs = policy_log_probs[batch_size // 2:]##===================================
+    chosen_ref_log_probs = ref_log_probs[:batch_size // 2]#4 ##===================================
+    reject_ref_log_probs = ref_log_probs[batch_size // 2:]#4 ##===================================
+    chosen_policy_log_probs = policy_log_probs[:batch_size // 2]#4 ##===================================
+    reject_policy_log_probs = policy_log_probs[batch_size // 2:]#4 ##===================================
 
-    pi_logratios = chosen_policy_log_probs - reject_policy_log_probs
-    ref_logratios = chosen_ref_log_probs - reject_ref_log_probs
+    pi_logratios = chosen_policy_log_probs - reject_policy_log_probs#4
+    ref_logratios = chosen_ref_log_probs - reject_ref_log_probs#4
     logits = pi_logratios - ref_logratios
-    loss = -F.logsigmoid(beta * logits)
-    return loss.mean()
+    loss = -F.logsigmoid(beta * logits)#4
+    return loss.mean()#1
 
 
 def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=None, beta=0.1):
@@ -56,15 +56,15 @@ def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=
 
     for step, batch in enumerate(loader, start=start_step + 1):
         last_step = step
-        x_chosen = batch['x_chosen'].to(args.device)
-        y_chosen = batch['y_chosen'].to(args.device)
-        mask_chosen = batch['mask_chosen'].to(args.device)
-        x_rejected = batch['x_rejected'].to(args.device)
-        y_rejected = batch['y_rejected'].to(args.device)
-        mask_rejected = batch['mask_rejected'].to(args.device)
-        x = torch.cat([x_chosen, x_rejected], dim=0)##===================================
-        y = torch.cat([y_chosen, y_rejected], dim=0)##===================================
-        mask = torch.cat([mask_chosen, mask_rejected], dim=0)##===================================
+        x_chosen = batch['x_chosen'].to(args.device)#4-1023
+        y_chosen = batch['y_chosen'].to(args.device)#4-1023
+        mask_chosen = batch['mask_chosen'].to(args.device)#4-1023
+        x_rejected = batch['x_rejected'].to(args.device)#4-1023
+        y_rejected = batch['y_rejected'].to(args.device)#4-1023
+        mask_rejected = batch['mask_rejected'].to(args.device)#4-1023
+        x = torch.cat([x_chosen, x_rejected], dim=0)#4*2-1023##===================================
+        y = torch.cat([y_chosen, y_rejected], dim=0)#4*2-1023##===================================
+        mask = torch.cat([mask_chosen, mask_rejected], dim=0)#4*2-1023##===================================
 
 
 
@@ -74,19 +74,19 @@ def train_epoch(epoch, loader, iters, ref_model, lm_config, start_step=0, wandb=
 
         with autocast_ctx:
             with torch.no_grad():
-                ref_outputs = ref_model(x)##===================================
-                ref_logits = ref_outputs.logits
-            ref_log_probs = logits_to_log_probs(ref_logits, y)##===================================
+                ref_outputs = ref_model(x)#4*2-1023-6400##===================================
+                ref_logits = ref_outputs.logits#4*2-1023-6400
+            ref_log_probs = logits_to_log_probs(ref_logits, y)#4*2-1023-6400  #4*2-1023----#4*2-1023##===================================
             
-            outputs = model(x)##===================================
-            logits = outputs.logits
-            policy_log_probs = logits_to_log_probs(logits, y)##===================================
+            outputs = model(x)#4*2-1023-6400##===================================
+            logits = outputs.logits#4*2-1023-6400
+            policy_log_probs = logits_to_log_probs(logits, y)#4*2-1023-6400  #4*2-1023----#4*2-1023##===================================
 
 
 
-            dpo_loss_val = dpo_loss(ref_log_probs, policy_log_probs, mask, beta=beta)##===================================##===================================
-            loss = dpo_loss_val + outputs.aux_loss
-            loss = loss / args.accumulation_steps
+            dpo_loss_val = dpo_loss(ref_log_probs, policy_log_probs, mask, beta=beta)#4*2-1023  #4*2-1023  #4*2-1023----#1##===================================##===================================
+            loss = dpo_loss_val + outputs.aux_loss#0
+            loss = loss / args.accumulation_steps#1
         scaler.scale(loss).backward()
 
         if step % args.accumulation_steps == 0:
