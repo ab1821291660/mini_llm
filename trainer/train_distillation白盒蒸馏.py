@@ -26,7 +26,9 @@ def distillation_loss(student_logits, teacher_logits, temperature=1.0, reduction
     with torch.no_grad():
         teacher_probs = F.softmax(teacher_logits / temperature, dim=-1).detach()
 
+
     student_log_probs = F.log_softmax(student_logits / temperature, dim=-1)
+
 
     kl = F.kl_div(
         student_log_probs,
@@ -81,6 +83,7 @@ def train_epoch(epoch, loader, iters, teacher_model, lm_config_student,    start
         if lm_config_student.use_moe: ce_loss = ce_loss_raw + res.aux_loss##===================================
         else: ce_loss = ce_loss_raw
 
+
         # 2) Distillation Loss
         if teacher_model is not None:
             distill_loss = distillation_loss(##===================================
@@ -90,6 +93,7 @@ def train_epoch(epoch, loader, iters, teacher_model, lm_config_student,    start
             )
         else:
             distill_loss = torch.tensor(0.0, device=args.device)
+
 
         # 3) 总损失 = alpha * CE + (1-alpha) * Distill
         loss = (alpha * ce_loss + (1 - alpha) * distill_loss) / args.accumulation_steps##===================================
