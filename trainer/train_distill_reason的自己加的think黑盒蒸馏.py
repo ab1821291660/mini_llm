@@ -13,8 +13,8 @@ from contextlib import nullcontext
 from torch import optim, nn
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, DistributedSampler
-from model.model_minimind import MiniMindConfig
-from dataset.lm_dataset import SFTDataset
+from model.model_minimind import MiniMindConfig##===================================
+from dataset.lm_dataset import SFTDataset##===================================
 from trainer.trainer_utils import get_lr, Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, init_model, SkipBatchSampler
 
 warnings.filterwarnings('ignore')
@@ -32,16 +32,22 @@ def train_epoch(epoch, loader, iters, tokenizer, lm_config, start_step=0, wandb=
         X = X.to(args.device)
         Y = Y.to(args.device)
         loss_mask = loss_mask.to(args.device)
+
+
+
         lr = get_lr(epoch * iters + step, args.epochs * iters, args.learning_rate)
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
 
         with autocast_ctx:
-            res = model(X)
+            res = model(X)##===================================
+
+
+
             loss = loss_fct(
                 res.logits.view(-1, res.logits.size(-1)),
                 Y.view(-1)
-            ).view(Y.size())
+            ).view(Y.size())##===================================
 
             # 特殊标签位置增加权重（推理蒸馏特有）
             sp_ids = torch.isin(Y.view(-1),
@@ -52,9 +58,10 @@ def train_epoch(epoch, loader, iters, tokenizer, lm_config, start_step=0, wandb=
             loss_mask_sum = loss_mask.sum()
             loss_mask[sp_ids] = 10  # 对思考标签增加10倍权重
             loss_mask = loss_mask.view(Y.size())
+
             loss = (loss * loss_mask).sum() / loss_mask_sum
-            loss += res.aux_loss
-            loss = loss / args.accumulation_steps
+            loss += res.aux_loss##===================================
+            loss = loss / args.accumulation_steps##===================================
 
         scaler.scale(loss).backward()
 
@@ -68,7 +75,7 @@ def train_epoch(epoch, loader, iters, tokenizer, lm_config, start_step=0, wandb=
 
         if step % args.log_interval == 0 or step == iters - 1:
             spend_time = time.time() - start_time
-            current_loss = loss.item() * args.accumulation_steps
+            current_loss = loss.item() * args.accumulation_steps##===================================
             current_lr = optimizer.param_groups[-1]['lr']
             eta_min = spend_time / (step + 1) * iters // 60 - spend_time // 60
             
@@ -94,8 +101,8 @@ def train_epoch(epoch, loader, iters, tokenizer, lm_config, start_step=0, wandb=
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind Reasoning Distillation")
-    parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
-    parser.add_argument('--save_weight', default='reason', type=str, help="保存权重的前缀名")
+    parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")##===================================
+    parser.add_argument('--save_weight', default='reason', type=str, help="保存权重的前缀名")##===================================
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
     parser.add_argument("--batch_size", type=int, default=8, help="batch size")
     parser.add_argument("--learning_rate", type=float, default=1e-6, help="初始学习率")
@@ -109,10 +116,10 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_size', default=512, type=int, help="隐藏层维度")
     parser.add_argument('--num_hidden_layers', default=8, type=int, help="隐藏层数量")
     parser.add_argument('--max_seq_len', default=1024, type=int, help="训练的最大截断长度")
-    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")
+    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
     parser.add_argument("--data_path", type=str, default="../dataset/r1_mix_1024.jsonl", help="推理蒸馏数据路径")##===================================
-    parser.add_argument('--from_weight', default='dpo', type=str, help="基于哪个权重训练，默认dpo")
-    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
+    parser.add_argument('--from_weight', default='dpo', type=str, help="基于哪个权重训练，默认dpo,,或者full_sft")##===================================##===================================
+    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-Reasoning", help="wandb项目名")
     args = parser.parse_args()
@@ -142,8 +149,8 @@ if __name__ == "__main__":
         wandb.init(project=args.wandb_project, name=wandb_run_name, id=wandb_id, resume=resume)
     
     # ========== 5. 定义模型、数据、优化器 ==========
-    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)
-    train_ds = SFTDataset(args.data_path, tokenizer, max_length=args.max_seq_len)
+    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)##===================================
+    train_ds = SFTDataset(args.data_path, tokenizer, max_length=args.max_seq_len)##===================================
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
     scaler = torch.cuda.amp.GradScaler(enabled=(args.dtype == 'float16'))
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)

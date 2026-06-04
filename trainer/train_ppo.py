@@ -19,27 +19,17 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
-from dataset.lm_dataset import RLAIFDataset
+from model.model_minimind import MiniMindConfig, MiniMindForCausalLM##===================================
+from dataset.lm_dataset import RLAIFDataset##===================================
 from trainer.trainer_utils import Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, SkipBatchSampler, init_model, LMForRewardModel
-from trainer.rollout_engine import create_rollout_engine
-
+from trainer.rollout_engine import create_rollout_engine##===================================
 warnings.filterwarnings('ignore')
-
-
-def rep_penalty(text, n=3, cap=0.5):
-    toks = re.findall(r"\w+|[^\w\s]", text.lower())
-    grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
-    return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
-
-
 # 自定义的Critic模型，继承自MiniMindLM
 class CriticModel(MiniMindForCausalLM):
     def __init__(self, params):
         super().__init__(params)
         # 替换lm_head为输出单一价值的线性层
-        self.value_head = nn.Linear(params.hidden_size, 1)
-
+        self.value_head = nn.Linear(params.hidden_size, 1)##===================================
     def forward(self, input_ids=None, attention_mask=None, **kwargs):
         # 使用基础模型获取隐藏状态
         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
@@ -49,8 +39,14 @@ class CriticModel(MiniMindForCausalLM):
         return values
 
 
-def calculate_rewards(prompts, responses, reward_model):
-    rewards = torch.zeros(len(responses), device=args.device)
+
+
+def rep_penalty(text, n=3, cap=0.5):##===================================
+    toks = re.findall(r"\w+|[^\w\s]", text.lower())
+    grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
+    return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
+def calculate_rewards(prompts, responses, reward_model):#原prompts#b2   #第1次的预测#b2*6内容文本    #奖励模型"../internlm2-1_8b-reward"
+    rewards = torch.zeros(len(responses), device=args.device)#b2
 
     with torch.no_grad():
         reward_model_scores = []
@@ -67,10 +63,10 @@ def calculate_rewards(prompts, responses, reward_model):
                 answer = answer_content.strip()
             rewards[i] -= rep_penalty(answer)##===================================#
 
-            score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
+            score = reward_model.get_score(messages, answer)#1.111328125----##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
             reward_model_scores.append(score)
         reward_model_scores = torch.tensor(reward_model_scores, device=args.device)
-        rewards += reward_model_scores
+        rewards += reward_model_scores#b2##===================================
     return rewards
 
 
@@ -78,26 +74,43 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
     actor_model.train()
     critic_model.train()
     grad_accum_step = 0
-
     for step, batch in enumerate(loader, start=start_step + 1):
-        prompts = batch["prompt"]  # list[str], length B
+        prompts = batch['prompt']#b2 # list[str], length B
         enc = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=args.max_seq_len,
                         padding_side="left").to(args.device)  # input_ids: [B, P], attention_mask: [B, P]
 
-        rollout_result = rollout_engine.rollout(
+
+
+        rollout_result = rollout_engine.rollout(##===================================##===================================
             prompt_ids=enc.input_ids,
             attention_mask=enc.attention_mask,
-            num_generations=1,
-            max_new_tokens=args.max_gen_len,
+            num_generations=1,##===================================
+            max_new_tokens=args.max_gen_len,#1024
             temperature=0.8,
         )
+        # return RolloutResult(output_ids,#b2*6-1513
+        #                      completion_ids,#b2*6-1024 #第1次的预测##===================================
+        #                      per_token_logps,#b2*6-1024 #第2次的预测##===================================##===================================##===================================
+        #                      completions,#b2*6内容文本##===================================
+        #                      ##
+        #                      prompt_ids.new_full((output_ids.size(0),), prompt_len),#prompt_lens=#b2*6==489--tensor([489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489],device='cuda:0')
+        #                      attention_mask.new_ones(output_ids.size(0), completion_ids.size(1)))#completion_mask=#b2*6-1024
         gen_out = rollout_result.output_ids
         completion_ids = rollout_result.completion_ids
-        prompt_lens = rollout_result.prompt_lens.to(args.device)
-        responses_text = rollout_result.completions
         old_resp_logp = rollout_result.per_token_logps.to(args.device)
-        rewards = calculate_rewards(prompts, responses_text, reward_model)  # [B]
+        responses_text = rollout_result.completions
+        ##
+        prompt_lens = rollout_result.prompt_lens.to(args.device)
+        completion_pad_mask = rollout_result.completion_mask.to(args.device).bool()  # b2
 
+
+
+
+        rewards = calculate_rewards(prompts, responses_text, reward_model)  # [B]
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
         if args.debug_mode and is_main_process() and step % args.debug_interval == 0:
             for i in range(len(prompts)):
                 Logger(f"[DEBUG] step={step}, sample[{i}]")
@@ -111,7 +124,6 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
                 Logger(f"{'=' * 29} [DEBUG] sample[{i}] RESPONSE_END {'=' * 29}")
                 Logger(f"[DEBUG] reward={rewards[i].item():.4f}")
                 Logger('='*100)
-
         full_mask = (gen_out != tokenizer.pad_token_id).long()  # [B, P+R]
         labels = gen_out[:, 1:].clone()  # [B, P+R-1]
         B = len(prompts)
@@ -127,13 +139,15 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
 
         with torch.no_grad():  # Rollout阶段只需推理获取old_logp和old_values，切断梯度省显存
             critic_for_rollout = critic_model.module if isinstance(critic_model, DistributedDataParallel) else critic_model
-            values_seq = critic_for_rollout(input_ids=gen_out, attention_mask=full_mask)
+            values_seq = critic_for_rollout(input_ids=gen_out, attention_mask=full_mask)##===================================##===================================
             old_resp_values = values_seq.gather(1, logp_pos) * resp_value_mask
-            
+
+
             ref_resp_logp = F.log_softmax(ref_model(input_ids=gen_out, attention_mask=full_mask).logits[:, :-1], dim=-1).gather(2, labels.unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
             token_rewards = torch.zeros_like(old_resp_logp)
             last_idx = resp_lengths - 1  # [B]
-            token_rewards[torch.arange(B, device=args.device)[valid_resp], last_idx[valid_resp]] += rewards[valid_resp]  # 末尾加外部奖励
+            token_rewards[torch.arange(B, device=args.device)[valid_resp], last_idx[valid_resp]] += rewards[valid_resp]  # 末尾加外部奖励##===================================
+
 
             gen_len = old_resp_values.size(1); lastgaelam = torch.zeros(B, device=args.device); advs_rev = []
             for t in reversed(range(gen_len)):
@@ -142,12 +156,15 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
                 lastgaelam = delta + args.gamma * args.lam * lastgaelam
                 advs_rev.append(lastgaelam)
             advantages = torch.stack(advs_rev[::-1], dim=1)  # [B, R]
-            returns = advantages + old_resp_values  # [B, R]
-
+            returns = advantages + old_resp_values  # [B, R]##===================================
+            ##
             adv_mean = (advantages * resp_policy_mask).sum() / resp_policy_mask.sum().clamp(min=1)
             adv_var = ((advantages - adv_mean) ** 2 * resp_policy_mask).sum() / resp_policy_mask.sum().clamp(min=1)
             advantages = (advantages - adv_mean) * torch.rsqrt(adv_var + 1e-8) * resp_policy_mask
-
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
         mb_size = max(1, min(args.mini_batch_size, B))
         stop_ppo = False
         policy_loss_sum = 0.0
@@ -157,66 +174,79 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
         clipfrac_sum = 0.0
         aux_loss_sum = 0.0
         log_count = 0
-        actor_unwrapped = actor_model.module if isinstance(actor_model, DistributedDataParallel) else actor_model
-        critic_unwrapped = critic_model.module if isinstance(critic_model, DistributedDataParallel) else critic_model
-        for ppo_epoch in range(args.ppo_update_iters):
+        actor_unwrapped = actor_model.module if isinstance(actor_model, DistributedDataParallel) else actor_model##===================================##===================================
+        critic_unwrapped = critic_model.module if isinstance(critic_model, DistributedDataParallel) else critic_model##===================================##===================================
+        for ppo_epoch in range(args.ppo_update_iters):#2同一批rollout重复更新次数
             if stop_ppo:
                 break
             b_inds = torch.randperm(B, device=args.device)
             for i in range(0, B, mb_size):
                 inds = b_inds[i:i + mb_size]
-                
-                mb_values_seq = critic_unwrapped(input_ids=gen_out[inds], attention_mask=full_mask[inds])
+
+
+
+
+                ##第2次预测
+                mb_values_seq = critic_unwrapped(input_ids=gen_out[inds], attention_mask=full_mask[inds])##===================================##===================================
                 mb_resp_values = mb_values_seq.gather(1, logp_pos[inds])
-
+                ##
+                ##
+                ##第2次预测
                 with autocast_ctx:
-                    res = actor_unwrapped(input_ids=gen_out[inds], attention_mask=full_mask[inds])
+                    res = actor_unwrapped(input_ids=gen_out[inds], attention_mask=full_mask[inds])##===================================##===================================
                     aux_loss = res.aux_loss if lm_config.use_moe else torch.tensor(0.0, device=args.device)
-
                 mb_resp_logp = F.log_softmax(res.logits[:, :-1], dim=-1).gather(2, labels[inds].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos[inds])
-                
+
+
+
                 log_ratio = mb_resp_logp - old_resp_logp[inds]
                 approx_kl = (0.5 * (log_ratio ** 2) * resp_policy_mask[inds]).sum() / resp_policy_mask[inds].sum().clamp(min=1)
-                
                 # 同步各卡的 approx_kl，防止某卡 break 而其它卡继续导致 DDP 死锁
                 approx_kl_val = approx_kl.detach().clone()
                 if dist.is_initialized():
                     dist.all_reduce(approx_kl_val, op=dist.ReduceOp.AVG)
-                    
                 if approx_kl_val > args.early_stop_kl:
                     stop_ppo = True
-                
+                ##
                 ratio = torch.exp(log_ratio)
+                #截断率
                 clipfrac = ((((ratio - 1.0).abs() > args.clip_epsilon).float() * resp_policy_mask[inds]).sum()
                             / resp_policy_mask[inds].sum().clamp(min=1))
+                ##
+                ##
                 kl_ref_penalty = ((torch.exp(ref_resp_logp[inds] - mb_resp_logp) - (ref_resp_logp[inds] - mb_resp_logp) - 1.0)
                                   * resp_policy_mask[inds]).sum() / resp_policy_mask[inds].sum().clamp(min=1)
                 policy_loss = ((torch.max(-advantages[inds] * ratio,
                                           -advantages[inds] * torch.clamp(ratio, 1.0 - args.clip_epsilon, 1.0 + args.clip_epsilon))
                                * resp_policy_mask[inds]).sum() / resp_policy_mask[inds].sum().clamp(min=1)
-                               + args.kl_coef * kl_ref_penalty)
-                value_loss = 0.5 * (torch.max((mb_resp_values - returns[inds]) ** 2,
+                               + args.kl_coef * kl_ref_penalty)##===================================
+                value_loss = 0.5 * (torch.max((mb_resp_values - returns[inds]) ** 2,##===================================##===================================
                                               (torch.clamp(mb_resp_values, old_resp_values[inds] - args.cliprange_value,
                                                            old_resp_values[inds] + args.cliprange_value) - returns[inds]) ** 2)
                                     * resp_value_mask[inds]).sum() / resp_value_mask[inds].sum().clamp(min=1)
 
-                kl = approx_kl_val
-                kl_ref = kl_ref_penalty.detach()
+
 
                 # 早停时必须保证 forward-backward 闭环，故只截断 loss 不中断 DDP 通信
                 if stop_ppo:
                     loss = (policy_loss + args.vf_coef * value_loss + aux_loss) * 0.0
                 else:
-                    loss = (policy_loss + args.vf_coef * value_loss + aux_loss) / args.accumulation_steps
+                    loss = (policy_loss + args.vf_coef * value_loss + aux_loss) / args.accumulation_steps##===================================
                 
                 loss.backward()
 
+
+
+
+                kl = approx_kl_val##===================================
+                kl_ref = kl_ref_penalty.detach()##========
+                ##
                 policy_loss_sum += policy_loss.item()
-                value_loss_sum += value_loss.item()
-                kl_sum += kl.item()
-                kl_ref_sum += kl_ref.item()
-                clipfrac_sum += clipfrac.item()
                 aux_loss_sum += aux_loss.item()
+                value_loss_sum += value_loss.item()
+                kl_ref_sum += kl_ref.item()##========
+                kl_sum += kl.item()##===================================
+                clipfrac_sum += clipfrac.item()#截断率##===================================##===================================
                 log_count += 1
 
                 grad_accum_step += 1
@@ -291,11 +321,13 @@ def ppo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, actor_sched
         del kl, kl_ref, policy_loss, value_loss, loss, token_rewards, returns, old_resp_values, prompt_lens, logp_pos
 
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind PPO (Proximal Policy Optimization)")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument('--save_weight', default='ppo_actor', type=str, help="保存权重的前缀名")
-    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
+    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")##===================================
     parser.add_argument("--batch_size", type=int, default=2, help="batch size")##===================================##===================================##===================================##===================================
     parser.add_argument("--learning_rate", type=float, default=3e-7, help="Actor学习率")
     parser.add_argument("--critic_learning_rate", type=float, default=5e-7, help="Critic学习率")
@@ -311,20 +343,21 @@ if __name__ == "__main__":
     parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE架构（0=否，1=是）")##===================================
     parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")##===================================
     parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")##===================================
-    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")##===================================##===================================
+    parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")##===================================
+    ##
     parser.add_argument("--clip_epsilon", type=float, default=0.2, help="PPO裁剪参数")##===================================
     parser.add_argument("--vf_coef", type=float, default=0.5, help="Value function系数")##===================================
     parser.add_argument("--kl_coef", type=float, default=0.02, help="KL散度惩罚系数")##===================================
     parser.add_argument("--gamma", type=float, default=1.0, help="GAE折扣因子")##===================================
     parser.add_argument("--lam", type=float, default=0.95, help="GAE lambda参数")##===================================
     parser.add_argument("--cliprange_value", type=float, default=0.2, help="Value function裁剪范围")##===================================
-
+    ##
     parser.add_argument("--ppo_update_iters", type=int, default=2, help="同一批rollout重复更新次数")
     parser.add_argument("--early_stop_kl", type=float, default=0.25, help="PPO early stop 的 KL 阈值")
     parser.add_argument("--mini_batch_size", type=int, default=2, help="PPO每次更新的minibatch大小")##===================================##===================================##===================================##===================================
     parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
-    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
-    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================
+    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    parser.add_argument("--reward_model_path", type=str, default="../internlm2-1_8b-reward", help="Reward模型路径")# parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-PPO", help="wandb项目名")
@@ -334,7 +367,7 @@ if __name__ == "__main__":
     parser.add_argument("--thinking_ratio", type=float, default=0.9, help="按概率开启thinking（0.0~1.0）")##===================================
 
 
-    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")##===================================
+    parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")##===================================##===================================
     parser.add_argument("--sglang_base_url", type=str, default="http://localhost:8998", help="SGLang服务器URL")
     parser.add_argument("--sglang_model_path", type=str, default="../model", help="SGLang tokenizer路径")
     parser.add_argument("--sglang_shared_path", type=str, default="./sglang_ckpt_ppo", help="SGLang共享存储路径")
@@ -347,7 +380,8 @@ if __name__ == "__main__":
     
     # ========== 2. 配置目录、模型参数、检查ckp ==========
     os.makedirs(args.save_dir, exist_ok=True)
-    lm_config = MiniMindConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers, use_moe=bool(args.use_moe))
+    lm_config = MiniMindConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers,
+                            use_moe=bool(args.use_moe))##===================================
     ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume==1 else None
     
     # ========== 3. 设置混合精度 ==========
@@ -368,18 +402,27 @@ if __name__ == "__main__":
     base_weight = args.from_weight
     # Actor模型
     actor_model, tokenizer = init_model(lm_config, base_weight, device=args.device)
+    ##
+    ##
     ref_model, _ = init_model(lm_config, base_weight, device=args.device)
     ref_model = ref_model.eval().requires_grad_(False)
+    ##
+    ##
     moe_suffix = '_moe' if lm_config.use_moe else ''
     ckp = f'{args.save_dir}/{base_weight}_{lm_config.hidden_size}{moe_suffix}.pth'
     state_dict = torch.load(ckp, map_location=args.device)
     critic_model = CriticModel(lm_config)
     critic_model.load_state_dict(state_dict, strict=False)
     critic_model = critic_model.to(args.device)
+    ##
+    ##
+    # Reward模型=="../../internlm2-1_8b-reward", help="Reward模型路径"
     reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)
-    # Rollout引擎
+
+
+    # Rollout引擎（可插拔替换，只负责 policy 推理）
     rollout_engine = create_rollout_engine(
-        engine_type=args.rollout_engine,
+        engine_type=args.rollout_engine,#["torch", "sglang"]##===================================##===================================
         policy_model=actor_model,
         tokenizer=tokenizer,
         device=args.device,
@@ -388,8 +431,16 @@ if __name__ == "__main__":
         sglang_model_path=args.sglang_model_path,
         sglang_shared_path=args.sglang_shared_path,
     )
+
+
+
+
     train_ds = RLAIFDataset(args.data_path, tokenizer, max_length=(args.max_seq_len + args.max_gen_len), thinking_ratio=args.thinking_ratio)
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+
+
+
+
     actor_optimizer = optim.AdamW(actor_model.parameters(), lr=args.learning_rate)
     critic_optimizer = optim.AdamW(critic_model.parameters(), lr=args.critic_learning_rate)
     loader_for_count = DataLoader(train_ds, batch_size=args.batch_size, sampler=train_sampler)
@@ -414,11 +465,11 @@ if __name__ == "__main__":
     if args.use_compile == 1:
         actor_model = torch.compile(actor_model)
         Logger('torch.compile enabled')
-        rollout_engine.update_policy(actor_model)
+        rollout_engine.update_policy(actor_model)##===================================##===================================
     if dist.is_initialized():
         actor_model = DistributedDataParallel(actor_model, device_ids=[local_rank])
         critic_model = DistributedDataParallel(critic_model, device_ids=[local_rank])
-    rollout_engine.update_policy(actor_model)
+    rollout_engine.update_policy(actor_model)##===================================##===================================
     
     # ========== 8. 开始训练 ==========
     for epoch in range(start_epoch, args.epochs):

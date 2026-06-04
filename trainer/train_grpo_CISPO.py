@@ -32,7 +32,7 @@ def rep_penalty(text, n=3, cap=0.5):##===================================
     toks = re.findall(r"\w+|[^\w\s]", text.lower())
     grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
     return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
-def calculate_rewards(prompts, responses, reward_model):#原prompts#b2   #第1次的预测#b2*6内容    #奖励模型"../internlm2-1_8b-reward"
+def calculate_rewards(prompts, responses, reward_model):#原prompts#b2   #第1次的预测#b2*6内容文本    #奖励模型"../internlm2-1_8b-reward"
     rewards = torch.zeros(len(responses), device=args.device)#b2*6
 
     with torch.no_grad():
@@ -110,9 +110,9 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
 
 
         rollout_result = rollout_engine.rollout(##===================================##===================================
-            prompt_ids=prompt_inputs["input_ids"],#b2-489##===================================##===================================##===================================##===================================
+            prompt_ids=prompt_inputs["input_ids"],#b2-489
             attention_mask=prompt_inputs["attention_mask"],#b2-489
-            num_generations=args.num_generations,#6
+            num_generations=args.num_generations,#6##===================================
             max_new_tokens=args.max_gen_len,#1024
             temperature=0.8,
         )
@@ -140,10 +140,10 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
 
         #b2*6----                   #原prompts#b2   #第1次的预测#b2*6内容文字    #奖励模型"../internlm2-1_8b-reward"
         rewards = calculate_rewards(prompts, completions, reward_model).to(args.device)# [B*num_gen]##===================================##===================================
-
-
-
-
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
         grouped_rewards = rewards.view(-1, args.num_generations)#b2-6  # [B, num_gen]
         # mean_r = grouped_rewards.mean(dim=1)
         mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)#b2*6  # [B*num_gen]
@@ -164,11 +164,8 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
 
 
         with torch.no_grad():
-            #ref_model##===================================#第二次计算#b2*6-1024----#b2*6-1513  #b2*6-1513
+            #第二次计算ref_model##===================================#第二次计算#b2*6-1024----#b2*6-1513  #b2*6-1513
             ref_per_token_logps = F.log_softmax(ref_model(outputs, attention_mask=full_mask).logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
-        ##===================================##===================================##===================================##===================================
-        ##===================================##===================================##===================================##===================================
-        ##===================================##===================================##===================================##===================================
         ##===================================##===================================##===================================##===================================
         if args.debug_mode and is_main_process() and step % args.debug_interval == 0:
             for i in range(len(prompts)):
@@ -191,6 +188,7 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
 
         kl_div = ref_per_token_logps - per_token_logps#b2*6-1024  ##===================================##===================================
         per_token_kl = torch.exp(kl_div) - kl_div - 1#b2*6-1024    # [B*num_gen, R]
+        ##
         ratio = torch.exp(per_token_logps - old_per_token_logps)#b2*6-1024    # [B*num_gen, R]##===================================##===================================
         # else:#cispo
         # else:#cispo
@@ -198,7 +196,8 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         # else:#cispo
         if args.loss_type == "cispo":
             clamped_ratio = torch.clamp(ratio, max=args.epsilon_high).detach()#b2*6-1024
-            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps  - args.beta * per_token_kl)#b2*6-1024##===================================
+            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps
+                               - args.beta * per_token_kl)#b2*6-1024##===================================
         # else:#grpo
         # else:#grpo
         # else:#grpo
@@ -207,7 +206,8 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
             clipped_ratio = torch.clamp(ratio, 1 - args.epsilon, 1 + args.epsilon)
             per_token_loss1 = ratio * advantages.unsqueeze(1)
             per_token_loss2 = clipped_ratio * advantages.unsqueeze(1)
-            per_token_loss = -(torch.min(per_token_loss1, per_token_loss2)  - args.beta * per_token_kl)##===================================
+            per_token_loss = -(torch.min(per_token_loss1, per_token_loss2)
+                               - args.beta * per_token_kl)##===================================
         # else:#
         # else:#
         # else:#
@@ -288,12 +288,14 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         optimizer.zero_grad()
 
 
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind GRPO (Group Relative Policy Optimization)")
     parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
     parser.add_argument('--save_weight', default='grpo', type=str, help="保存权重的前缀名")
-    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
-    parser.add_argument("--batch_size", type=int, default=2, help="batch size")
+    parser.add_argument("--epochs", type=int, default=1, help="训练轮数")##===================================
+    parser.add_argument("--batch_size", type=int, default=2, help="batch size")##===================================
     parser.add_argument("--learning_rate", type=float, default=3e-7, help="初始学习率")
     parser.add_argument("--device", type=str, default="cuda:0" if torch.cuda.is_available() else "cpu", help="训练设备")
     parser.add_argument("--dtype", type=str, default="bfloat16", help="混合精度类型")
@@ -308,6 +310,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_seq_len', default=768, type=int, help="Prompt最大长度")##===================================
     parser.add_argument("--max_gen_len", type=int, default=1024, help="生成的最大长度")##===================================
     parser.add_argument("--data_path", type=str, default="../dataset/rlaif.jsonl", help="RLAIF数据路径")##===================================
+    ##
     parser.add_argument("--num_generations", type=int, default=6, help="每个prompt生成的样本数")##===================================
     parser.add_argument("--beta", type=float, default=0.1, help="KL惩罚系数")##===================================
     parser.add_argument("--loss_type", type=str, default="cispo", choices=["grpo", "cispo"], help="loss类型")##===================================##===================================
@@ -315,8 +318,7 @@ if __name__ == "__main__":
     parser.add_argument("--epsilon_high", type=float, default=5.0, help="epsilon上界")##===================================
     parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
     # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
-    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
-    parser.add_argument("--reward_model_path", type=str, default="../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    parser.add_argument("--reward_model_path", type=str, default="../internlm2-1_8b-reward", help="Reward模型路径")# parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-GRPO", help="wandb项目名")
@@ -360,14 +362,16 @@ if __name__ == "__main__":
     # ========== 5. 初始化模型和数据 ==========
     base_weight = args.from_weight
     # Policy模型
-    model, tokenizer = init_model(lm_config, base_weight, device=args.device)##===================================
+    model, tokenizer = init_model(lm_config, base_weight, device=args.device)
+    ##
     ##
     # Reference模型
-    ref_model, _ = init_model(lm_config, base_weight, device=args.device)##===================================
+    ref_model, _ = init_model(lm_config, base_weight, device=args.device)
     ref_model = ref_model.eval().requires_grad_(False)
     ##
+    ##
     # Reward模型=="../../internlm2-1_8b-reward", help="Reward模型路径"
-    reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)##===================================
+    reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)
 
 
     # Rollout引擎（可插拔替换，只负责 policy 推理）
