@@ -87,6 +87,9 @@ def main():
             inputs = tokenizer.bos_token + prompt
         else:
             inputs = tokenizer.apply_chat_template(conversation, tokenize=False, add_generation_prompt=True, open_thinking=bool(args.open_thinking))##===================================
+        # templates = {"conversation": conversation, "tokenize": False, "add_generation_prompt": True}
+        # if args.weight == 'reason': templates["enable_thinking"] = True # 仅Reason模型使用
+        # inputs = tokenizer.apply_chat_template(**templates) if args.weight != 'pretrain' else (tokenizer.bos_token + prompt)
         inputs = tokenizer(inputs, return_tensors="pt", truncation=True).to(args.device)
 
 
