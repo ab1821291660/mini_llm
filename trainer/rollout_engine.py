@@ -20,21 +20,21 @@ from torch.nn.parallel import DistributedDataParallel
 from transformers import AutoTokenizer
 
 
-# ===== 计算每个 token 的 logprob =====
-def compute_per_token_logps(model, input_ids: Tensor, n_keep: int, attention_mask: Optional[Tensor] = None) -> Tensor:
+# ===== 计算每个 token 的 logprob =====#b2*6-1513       #1024        #b2*6-1513
+def compute_per_token_logps(model, input_ids: Tensor, n_keep: int, attention_mask: Optional[Tensor] = None) -> Tensor:##===================================
     if n_keep <= 0:
         return input_ids.new_empty((input_ids.size(0), 0), dtype=torch.float32)
     unwrapped = model.module if isinstance(model, DistributedDataParallel) else model
     input_ids = input_ids.detach().clone() if input_ids.is_inference() else input_ids
-    logits = unwrapped(input_ids, attention_mask=attention_mask, logits_to_keep=n_keep + 1).logits[:, :-1, :]
+    ##b2*6-1024-6400----b2*6-1513  #2*6-1513                     #1024
+    logits = unwrapped(input_ids, attention_mask=attention_mask, logits_to_keep=n_keep + 1).logits[:, :-1, :]#b2*6-1024-6400##===================================##===================================##===================================##===================================
     per_token_logps = []
-    for logits_row, ids_row in zip(logits, input_ids[:, -n_keep:]):
-        ids_row = ids_row.detach().clone() if ids_row.is_inference() else ids_row
-        per_token_logps.append(
+    for logits_row, ids_row in zip(logits, input_ids[:, -n_keep:]):#b2*6-1024-6400  #b2*6-1024
+        ids_row = ids_row.detach().clone() if ids_row.is_inference() else ids_row#1024
+        per_token_logps.append(#b2*6-1024
             torch.gather(logits_row.log_softmax(dim=-1), 1, ids_row.unsqueeze(1)).squeeze(1)
         )
-    return torch.stack(per_token_logps)
-
+    return torch.stack(per_token_logps)#b2*6-1024
 
 # ===== Rollout 结果 =====
 @dataclass
@@ -60,6 +60,8 @@ class RolloutEngine(ABC):
         pass
 
 
+
+
 # ===== PyTorch 原生推理引擎 =====
 class TorchRolloutEngine(RolloutEngine):
     def __init__(self, policy_model: torch.nn.Module, tokenizer, device: str = "cuda", autocast_ctx=None):
@@ -67,32 +69,43 @@ class TorchRolloutEngine(RolloutEngine):
         self.tokenizer = tokenizer
         self.device = device
         self.autocast_ctx = autocast_ctx
-    
+                      #b2-489             #b2-489                 #6                    #1024                #0.8
     def rollout(self, prompt_ids: Tensor, attention_mask: Tensor, num_generations: int, max_new_tokens: int, temperature: float = 0.8) -> RolloutResult:
         model = self.policy_model.module if isinstance(self.policy_model, DistributedDataParallel) else self.policy_model
         ctx = self.autocast_ctx if self.autocast_ctx else nullcontext()
         with torch.no_grad(), ctx:
-            output_ids = model.generate(
+            output_ids = model.generate(#第1次的预测b2*6-1513##===================================##===================================##===================================
                 input_ids=prompt_ids.repeat_interleave(num_generations, dim=0),
                 attention_mask=attention_mask.repeat_interleave(num_generations, dim=0),
                 max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=temperature,
+                do_sample=True,#1024
+                temperature=temperature,#0.8
                 num_return_sequences=1,
                 pad_token_id=self.tokenizer.pad_token_id,
                 eos_token_id=self.tokenizer.eos_token_id,
             ).clone()  # [B*num_gen, P+R]
-            prompt_len = prompt_ids.size(1)
-            completion_ids = output_ids[:, prompt_len:]  # [B*num_gen, R]
-            full_mask = (output_ids != self.tokenizer.pad_token_id).long()
-            per_token_logps = compute_per_token_logps(self.policy_model, output_ids, completion_ids.size(1), attention_mask=full_mask)
-        completions = self.tokenizer.batch_decode(completion_ids, skip_special_tokens=True)
-        return RolloutResult(output_ids, completion_ids, per_token_logps, completions,
-                             prompt_ids.new_full((output_ids.size(0),), prompt_len),
-                             attention_mask.new_ones(output_ids.size(0), completion_ids.size(1)))
+            prompt_len = prompt_ids.size(1)#489
+            completion_ids = output_ids[:, prompt_len:] #b2*6-1024##===================================  # [B*num_gen, R]
+            ##
+            ##
+            ##
+            ##
+            full_mask = (output_ids != self.tokenizer.pad_token_id).long()#b2*6-1513
+            # #第2次的预测b2*6-1024----#b2*6-1513  #1024  #b2*6-1513
+            per_token_logps = compute_per_token_logps(self.policy_model, output_ids, completion_ids.size(1), attention_mask=full_mask)#第2次的预测##===================================##===================================##===================================
+        completions = self.tokenizer.batch_decode(completion_ids, skip_special_tokens=True)#
+        return RolloutResult(output_ids,#b2*6-1513
+                             completion_ids,#b2*6-1024 #第1次的预测##===================================
+                             per_token_logps,#b2*6-1024 #第2次的预测##===================================##===================================##===================================
+                             completions,#b2*6内容文本##===================================
+                             ##
+                             prompt_ids.new_full((output_ids.size(0),), prompt_len),#prompt_lens=#b2*6==489--tensor([489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489],device='cuda:0')
+                             attention_mask.new_ones(output_ids.size(0), completion_ids.size(1)))#completion_mask=#b2*6-1024
     
     def update_policy(self, model: torch.nn.Module):
         self.policy_model = model
+
+
 
 
 # ===== SGLang HTTP API 推理引擎 =====
@@ -205,6 +218,8 @@ class SGLangRolloutEngine(RolloutEngine):
             return False
 
 
+
+
 # ===== 工厂函数 =====
 def create_rollout_engine(
     engine_type: str = "torch",
@@ -216,9 +231,10 @@ def create_rollout_engine(
     sglang_model_path: str = None,
     sglang_shared_path: str = None,
 ) -> RolloutEngine:
-    if engine_type == "torch":
+    if engine_type == "torch":##===================================
         return TorchRolloutEngine(policy_model, tokenizer, device, autocast_ctx)
     elif engine_type == "sglang":
         return SGLangRolloutEngine(sglang_base_url, sglang_model_path, sglang_shared_path)
     else:
         raise ValueError(f"不支持的引擎类型: {engine_type}")
+

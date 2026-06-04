@@ -20,24 +20,24 @@ from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, DistributedSampler
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from transformers import AutoModel
-from model.model_minimind import MiniMindConfig, MiniMindForCausalLM
-from dataset.lm_dataset import RLAIFDataset
+from model.model_minimind import MiniMindConfig, MiniMindForCausalLM##===================================
+from dataset.lm_dataset import RLAIFDataset##===================================
 from trainer.trainer_utils import Logger, is_main_process, lm_checkpoint, init_distributed_mode, setup_seed, SkipBatchSampler, init_model, LMForRewardModel
-from trainer.rollout_engine import create_rollout_engine
+from trainer.rollout_engine import create_rollout_engine##===================================
 
 warnings.filterwarnings('ignore')
 
 
-def rep_penalty(text, n=3, cap=0.5):
+def rep_penalty(text, n=3, cap=0.5):##===================================
     toks = re.findall(r"\w+|[^\w\s]", text.lower())
     grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
     return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
-def calculate_rewards(prompts, responses, reward_model):
-    rewards = torch.zeros(len(responses), device=args.device)
+def calculate_rewards(prompts, responses, reward_model):#原prompts#b2   #第1次的预测#b2*6内容    #奖励模型"../internlm2-1_8b-reward"
+    rewards = torch.zeros(len(responses), device=args.device)#b2*6
 
     with torch.no_grad():
         reward_model_scores = []
-        batch_size = len(prompts)
+        batch_size = len(prompts)#b2
         for i in range(batch_size):
             for j in range(args.num_generations):
                 response_idx = i * args.num_generations + j
@@ -54,69 +54,86 @@ def calculate_rewards(prompts, responses, reward_model):
                     rewards[response_idx] += 1.0 if 20 <= len(thinking_content.strip()) <= 300 else -0.5
                     rewards[response_idx] += 0.25 if response.count('</think>') == 1 else -0.25
                     answer = answer_content.strip()
-                rewards[response_idx] -= rep_penalty(answer)##===================================#
+                rewards[response_idx] -= rep_penalty(answer)##===================================
 
-                score = reward_model.get_score(messages, answer)##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
+                score = reward_model.get_score(messages, answer)#1.111328125----##modelscope download --model Shanghai_AI_Laboratory/internlm2-1_8b-reward --local_dir ./internlm2-1_8b-reward
                 reward_model_scores.append(score)
-        reward_model_scores = torch.tensor(reward_model_scores, device=args.device)
-        rewards += reward_model_scores
+        reward_model_scores = torch.tensor(reward_model_scores, device=args.device)#b2*6
+        rewards += reward_model_scores#b2*6##===================================
     return rewards
 
 
 def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model, start_step=0, wandb=None, use_sglang=False):
-    for step, batch in enumerate(loader, start=start_step + 1):
-        prompts = batch['prompt']  # list[str], length B
-        prompt_inputs = tokenizer(prompts, return_tensors="pt", padding=True, return_token_type_ids=False,
-                                  padding_side="left", add_special_tokens=False).to(args.device)
+    for step, batch in enumerate(loader, start=start_step + 1):#['', '']    #
+        prompts = batch['prompt']#b2 # list[str], length B
+        prompt_inputs = tokenizer(prompts, return_tensors="pt", padding=True, return_token_type_ids=False, padding_side="left", add_special_tokens=False).to(args.device)
         if args.max_seq_len:
-            prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -args.max_seq_len:]
-            prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -args.max_seq_len:]
+            prompt_inputs["input_ids"] = prompt_inputs["input_ids"][:, -args.max_seq_len:]#b2-489
+            prompt_inputs["attention_mask"] = prompt_inputs["attention_mask"][:, -args.max_seq_len:]#b2-489
+
 
 
         rollout_result = rollout_engine.rollout(##===================================##===================================
-            prompt_ids=prompt_inputs["input_ids"],##===================================##===================================##===================================##===================================
-            attention_mask=prompt_inputs["attention_mask"],
-            num_generations=args.num_generations,
-            max_new_tokens=args.max_gen_len,
+            prompt_ids=prompt_inputs["input_ids"],#b2-489##===================================##===================================##===================================##===================================
+            attention_mask=prompt_inputs["attention_mask"],#b2-489
+            num_generations=args.num_generations,#6
+            max_new_tokens=args.max_gen_len,#1024
             temperature=0.8,
         )
-        outputs = rollout_result.output_ids
-        completion_ids = rollout_result.completion_ids
-        completions = rollout_result.completions##===================================##===================================##===================================##===================================
-        old_per_token_logps = rollout_result.per_token_logps.to(args.device).detach()##===================================
-        prompt_lens = rollout_result.prompt_lens.to(args.device)##===================================
-        full_mask = (outputs != tokenizer.pad_token_id).long()
-        logp_pos = prompt_lens.unsqueeze(1) - 1 + torch.arange(completion_ids.size(1), device=args.device).unsqueeze(0)
+        # return RolloutResult(output_ids,#b2*6-1513
+        #                      completion_ids,#b2*6-1024 #第1次的预测##===================================
+        #                      per_token_logps,#b2*6-1024 #第2次的预测##===================================##===================================##===================================
+        #                      completions,#b2*6内容文本##===================================
+        #                      ##
+        #                      prompt_ids.new_full((output_ids.size(0),), prompt_len),#prompt_lens=#b2*6==489--tensor([489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489],device='cuda:0')
+        #                      attention_mask.new_ones(output_ids.size(0), completion_ids.size(1)))#completion_mask=#b2*6-1024
+        outputs = rollout_result.output_ids#b2*6-1513
+        completion_ids = rollout_result.completion_ids#b2*6-1024
+        old_per_token_logps = rollout_result.per_token_logps.to(args.device).detach()#b2*6-1024##===================================
+        completions = rollout_result.completions#b2*6内容文字##===================================##===================================##===================================##===================================
+        ##
+        prompt_lens = rollout_result.prompt_lens.to(args.device)#b2*6==489--tensor([489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489, 489],device='cuda:0')##===================================
+        completion_pad_mask = rollout_result.completion_mask.to(args.device).bool()#b2*6-1024
+        ##
+        ##
+        full_mask = (outputs != tokenizer.pad_token_id).long()#b2*6-1513
+        logp_pos = prompt_lens.unsqueeze(1) - 1 + torch.arange(completion_ids.size(1), device=args.device).unsqueeze(0)#b2*6-1024
 
 
 
 
-                                    #原prompts #第1次的预测 #奖励模型
-        rewards = calculate_rewards(prompts, completions, reward_model).to(args.device)  # [B*num_gen]##===================================##===================================
+        #b2*6----                   #原prompts#b2   #第1次的预测#b2*6内容文字    #奖励模型"../internlm2-1_8b-reward"
+        rewards = calculate_rewards(prompts, completions, reward_model).to(args.device)# [B*num_gen]##===================================##===================================
 
 
 
 
-        grouped_rewards = rewards.view(-1, args.num_generations)  # [B, num_gen]
+        grouped_rewards = rewards.view(-1, args.num_generations)#b2-6  # [B, num_gen]
         # mean_r = grouped_rewards.mean(dim=1)
-        mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)  # [B*num_gen]
-        std_r = grouped_rewards.std(dim=1, unbiased=False).repeat_interleave(args.num_generations)  # [B*num_gen]
-        advantages = (rewards - mean_r) / (std_r + 1e-4)  # [B*num_gen]
-        ##===================================##===================================##===================================##===================================
-        ##===================================##===================================##===================================##===================================
-        ##===================================##===================================##===================================##===================================
-        ##===================================##===================================##===================================##===================================
+        mean_r = grouped_rewards.mean(dim=1).repeat_interleave(args.num_generations)#b2*6  # [B*num_gen]
+        std_r = grouped_rewards.std(dim=1, unbiased=False).repeat_interleave(args.num_generations)#b2*6  # [B*num_gen]
+        advantages = (rewards - mean_r) / (std_r + 1e-4)#b2*6  # [B*num_gen]
+        ##===================================##===================================##===================================##===================================第二次计算
+        ##===================================##===================================##===================================##===================================第二次计算
+        ##===================================##===================================##===================================##===================================第二次计算
+        ##===================================##===================================##===================================##===================================第二次计算
         model_unwrapped = model.module if isinstance(model, DistributedDataParallel) else model
         with autocast_ctx:
+            #第二次计算b2*6-1024----#b2*6-1513  #b2*6-1513
             res = model_unwrapped(outputs, attention_mask=full_mask)##===================================
             aux_loss = res.aux_loss if lm_config.use_moe else torch.tensor(0.0, device=args.device)
-            per_token_logps = F.log_softmax(res.logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
+            per_token_logps = F.log_softmax(res.logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)#b2*6-1024
 
 
-        with torch.no_grad():                   ##===================================
+
+
+        with torch.no_grad():
+            #ref_model##===================================#第二次计算#b2*6-1024----#b2*6-1513  #b2*6-1513
             ref_per_token_logps = F.log_softmax(ref_model(outputs, attention_mask=full_mask).logits[:, :-1, :], dim=-1).gather(2, outputs[:, 1:].unsqueeze(-1)).squeeze(-1).gather(1, logp_pos)
-
-
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
+        ##===================================##===================================##===================================##===================================
         if args.debug_mode and is_main_process() and step % args.debug_interval == 0:
             for i in range(len(prompts)):
                 Logger(f"[DEBUG] step={step}, sample[{i}]")
@@ -134,27 +151,37 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
 
 
 
-        completion_pad_mask = rollout_result.completion_mask.to(args.device).bool()
-        is_eos = (completion_ids == tokenizer.eos_token_id) & completion_pad_mask  # [B*num_gen, R]
-        eos_idx = torch.full((is_eos.size(0),), is_eos.size(1) - 1, dtype=torch.long, device=args.device)
-        eos_idx[is_eos.any(dim=1)] = is_eos.int().argmax(dim=1)[is_eos.any(dim=1)]
-        completion_mask = ((torch.arange(is_eos.size(1), device=args.device).expand(is_eos.size(0), -1) <= eos_idx.unsqueeze(1)) & completion_pad_mask).int()  # [B*num_gen, R]
 
-        kl_div = ref_per_token_logps - per_token_logps
-        per_token_kl = torch.exp(kl_div) - kl_div - 1  # [B*num_gen, R]
-        ratio = torch.exp(per_token_logps - old_per_token_logps)  # [B*num_gen, R]
+
+        kl_div = ref_per_token_logps - per_token_logps#b2*6-1024  ##===================================##===================================
+        per_token_kl = torch.exp(kl_div) - kl_div - 1#b2*6-1024    # [B*num_gen, R]
+        ratio = torch.exp(per_token_logps - old_per_token_logps)#b2*6-1024    # [B*num_gen, R]##===================================##===================================
+        # else:#cispo
+        # else:#cispo
+        # else:#cispo
+        # else:#cispo
         if args.loss_type == "cispo":
-            clamped_ratio = torch.clamp(ratio, max=args.epsilon_high).detach()
-            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps  - args.beta * per_token_kl)##===================================
+            clamped_ratio = torch.clamp(ratio, max=args.epsilon_high).detach()#b2*6-1024
+            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps  - args.beta * per_token_kl)#b2*6-1024##===================================
+        # else:#grpo
+        # else:#grpo
+        # else:#grpo
+        # else:#grpo
         else:#grpo
             clipped_ratio = torch.clamp(ratio, 1 - args.epsilon, 1 + args.epsilon)
             per_token_loss1 = ratio * advantages.unsqueeze(1)
             per_token_loss2 = clipped_ratio * advantages.unsqueeze(1)
             per_token_loss = -(torch.min(per_token_loss1, per_token_loss2)  - args.beta * per_token_kl)##===================================
-        # else:#grpo
-        # else:#grpo
-        # else:#grpo
-        # else:#grpo
+        # else:#
+        # else:#
+        # else:#
+        # else:#
+        completion_pad_mask = rollout_result.completion_mask.to(args.device).bool()#b2*6-1024##===================================
+        is_eos = (completion_ids == tokenizer.eos_token_id) & completion_pad_mask#b2*6-1024  # [B*num_gen, R]
+        eos_idx = torch.full((is_eos.size(0),), is_eos.size(1) - 1, dtype=torch.long, device=args.device)#12
+        eos_idx[is_eos.any(dim=1)] = is_eos.int().argmax(dim=1)[is_eos.any(dim=1)]#12
+        completion_mask = ((torch.arange(is_eos.size(1), device=args.device).expand(is_eos.size(0), -1) <= eos_idx.unsqueeze(1)) & completion_pad_mask).int()#b2*6-1024   # [B*num_gen, R]]
+        #tensor(0.0534, device='cuda:0', grad_fn=<MeanBackward0>)----#b2*6-1024  #b2*6-1024
         policy_loss = ((per_token_loss * completion_mask).sum(dim=1) / completion_mask.sum(dim=1).clamp(min=1)).mean()
         loss = (policy_loss + aux_loss) / args.accumulation_steps  # scalar ##===================================
         loss.backward()
@@ -171,10 +198,9 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         if step % args.log_interval == 0 or step == iters:
             policy_loss_val = loss.item() * args.accumulation_steps##===================================
             current_aux_loss = aux_loss.item()
-            kl_ref_val = ((ref_per_token_logps - per_token_logps) * completion_mask).sum().item() / max(completion_mask.sum().item(), 1)
+            kl_ref_val = ((ref_per_token_logps - per_token_logps) * completion_mask).sum().item() / max(completion_mask.sum().item(), 1)##===================================
             ##
             avg_reward_val = rewards.mean().item()
-            ##
             advantages_mean_val = advantages.mean().item()
             advantages_std_val = advantages.std().item()
             ##
@@ -182,10 +208,12 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
             current_lr = optimizer.param_groups[0]['lr']
 
             Logger(f'Epoch:[{epoch + 1}/{args.epochs}]({step}/{iters}), '
-                   f'Reward: {avg_reward_val:.4f}, KL_ref: {kl_ref_val:.4f}, '
+                   f'Reward: {avg_reward_val:.4f}, KL_ref: {kl_ref_val:.4f}, '##===================================
                    f'Adv Std: {advantages_std_val:.4f}, Adv Mean: {advantages_mean_val:.4f}, '
-                   f'Actor Loss: {policy_loss_val:.4f}, Avg Response Len: {avg_len_val:.2f}, Learning Rate: {current_lr:.8f}')
-
+                   f'Actor Loss: {policy_loss_val:.4f}, '
+                   f'Avg Response Len: {avg_len_val:.2f}, Learning Rate: {current_lr:.8f}')
+            # Epoch:[1/1](1/9751), Reward: -2.1561, KL_ref: -0.0007, Adv Std: 1.0442, Adv Mean: 0.0000, Actor Loss: 0.0068, Avg Response Len: 460.58, Learning Rate: 0.00000030
+            # Epoch:[1/1](2/9751), Reward: 0.1188, KL_ref: -0.0063, Adv Std: 1.0443, Adv Mean: -0.0000, Actor Loss: -0.0690, Avg Response Len: 439.50, Learning Rate: 0.00000030
             if wandb and is_main_process():
                 wandb.log({
                     "reward": avg_reward_val,
@@ -251,7 +279,8 @@ if __name__ == "__main__":
     parser.add_argument("--epsilon_high", type=float, default=5.0, help="epsilon上界")##===================================
     parser.add_argument('--from_weight', default='full_sft', type=str, help="基于哪个权重训练")##===================================##===================================
     # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
-    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
+    parser.add_argument("--reward_model_path", type=str, default="../internlm2-1_8b-reward", help="Reward模型路径")##===================================##===================================
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-GRPO", help="wandb项目名")
@@ -296,11 +325,11 @@ if __name__ == "__main__":
     base_weight = args.from_weight
     # Policy模型
     model, tokenizer = init_model(lm_config, base_weight, device=args.device)##===================================
+    ##
     # Reference模型
     ref_model, _ = init_model(lm_config, base_weight, device=args.device)##===================================
     ref_model = ref_model.eval().requires_grad_(False)
-
-
+    ##
     # Reward模型=="../../internlm2-1_8b-reward", help="Reward模型路径"
     reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)##===================================
 
@@ -366,3 +395,7 @@ if __name__ == "__main__":
     
     # ========== 9. 清理分布进程 ==========
     if dist.is_initialized(): dist.destroy_process_group()
+
+# Epoch:[1/1](1/9751), Reward: -2.1561, KL_ref: -0.0007, Adv Std: 1.0442, Adv Mean: 0.0000, Actor Loss: 0.0068, Avg Response Len: 460.58, Learning Rate: 0.00000030
+# Epoch:[1/1](2/9751), Reward: 0.1188, KL_ref: -0.0063, Adv Std: 1.0443, Adv Mean: -0.0000, Actor Loss: -0.0690, Avg Response Len: 439.50, Learning Rate: 0.00000030
+
