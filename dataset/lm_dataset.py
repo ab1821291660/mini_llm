@@ -255,13 +255,13 @@ class AgentRLDataset(Dataset):
 
     def parse_conversations(self, conversations):
         messages = []
-        tools = None
+        tools = None##===================================
         for message in conversations:
             message = dict(message)
             if message.get("role") == "system" and message.get("tools"):
-                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]
+                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]##===================================
             messages.append(message)
-        return messages[:-1], tools##===================================##===================================
+        return messages[:-1], tools##===================================
     def __getitem__(self, index):
         sample = self.samples[index]
         messages, tools = self.parse_conversations(sample['conversations'])##===================================
