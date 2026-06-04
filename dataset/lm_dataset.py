@@ -89,7 +89,7 @@ class SFTDataset(Dataset):
         for message in conversations:
             message = dict(message)
             if message.get("role") == "system" and message.get("tools"):
-                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]
+                tools = json.loads(message["tools"]) if isinstance(message["tools"], str) else message["tools"]##===================================
             if message.get("tool_calls") and isinstance(message["tool_calls"], str):
                 message["tool_calls"] = json.loads(message["tool_calls"])
             messages.append(message)
