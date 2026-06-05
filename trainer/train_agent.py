@@ -28,14 +28,7 @@ from trainer.trainer_utils import Logger, is_main_process, lm_checkpoint, init_d
 from trainer.rollout_engine import create_rollout_engine, compute_per_token_logps##===================================
 
 warnings.filterwarnings('ignore')
-
 # ================================ 工具与 Reward = Start ================================
-
-def rep_penalty(text, n=3, cap=0.5):
-    toks = re.findall(r"\w+|[^\w\s]", text.lower())
-    grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
-    return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
-
 # ======== 工具定义 ========
 TOOLS = [
     {"type": "function", "function": {"name": "calculate_math", "description": "计算数学表达式", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}},
@@ -52,7 +45,6 @@ TIME_DATA = {"Asia/Shanghai": "2025-03-07 14:30:00", "America/New_York": "2025-0
 EXCHANGE_DATA = {("USD", "CNY"): 7.21, ("EUR", "CNY"): 7.85, ("GBP", "CNY"): 9.12, ("JPY", "CNY"): 0.048, ("USD", "EUR"): 0.92, ("USD", "GBP"): 0.79, ("CNY", "JPY"): 20.83, ("AUD", "CNY"): 4.72}
 TRANSLATE_DATA = {("你好世界", "english"): "Hello World", ("Good morning", "chinese"): "早上好", ("今天天气真好", "english"): "The weather is nice today", ("I love programming", "chinese"): "我喜欢编程", ("机器学习很有趣", "english"): "Machine learning is interesting", ("Happy birthday", "chinese"): "生日快乐"}
 UNIT_DATA = {"km_miles": 0.621371, "miles_km": 1.60934, "kg_pounds": 2.20462, "pounds_kg": 0.453592, "meters_feet": 3.28084, "feet_meters": 0.3048, "celsius_fahrenheit": 1.8, "fahrenheit_celsius": 0.5556}
-
 # ======== 模拟执行 ========
 MOCK_RESULTS = {
     "calculate_math": lambda args: {"result": str(eval(str(args.get("expression", "0")).replace("^", "**").replace("×", "*").replace("÷", "/").replace("−", "-").replace("（", "(").replace("）", ")"), {"__builtins__": {}, "math": math}))},
@@ -95,7 +87,9 @@ def execute_tool(name, args):
         except: pass
 
 # ======== 多轮 Rollout ========
-def rollout_single(rollout_engine, tokenizer, messages, tools, max_turns=3, max_new_tokens=256, thinking_ratio=0.5, device="cuda"):
+def rollout_single(rollout_engine, tokenizer,
+                   messages, tools,
+                   max_turns=3, max_new_tokens=256, thinking_ratio=0.5, device="cuda"):
     all_outputs = []
     prompt_ids = None
     response_ids = []
@@ -110,7 +104,7 @@ def rollout_single(rollout_engine, tokenizer, messages, tools, max_turns=3, max_
         context_ids = inputs["input_ids"][0].tolist()
         if prompt_ids is None:
             prompt_ids = context_ids
-        rollout_result = rollout_engine.rollout(
+        rollout_result = rollout_engine.rollout(##===================================##===================================##===================================##===================================
             prompt_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             num_generations=1,
@@ -129,7 +123,7 @@ def rollout_single(rollout_engine, tokenizer, messages, tools, max_turns=3, max_
         response_mask.extend([1] * len(new_ids))
         response_old_logps.extend(new_logps)
         final_context = context + new_text
-        calls = parse_tool_calls(new_text)
+        calls = parse_tool_calls(new_text)##===================================
         if not calls:
             break
         unfinished = turn == max_turns - 1
@@ -155,8 +149,9 @@ def rollout_single(rollout_engine, tokenizer, messages, tools, max_turns=3, max_
     final_output = all_outputs[-1] if all_outputs else ""
     prompt_ids = prompt_ids or []
     return final_output, final_context, prompt_ids, response_ids, response_mask, response_old_logps, list(all_outputs), unfinished
-
-def rollout_batch(rollout_engine, tokenizer, messages_batch, tools_batch, num_gen, max_turns=3, max_new_tokens=256, thinking_ratio=0.5, device="cuda"):
+def rollout_batch(rollout_engine, tokenizer,
+                  messages_batch, tools_batch,
+                  num_gen, max_turns=3, max_new_tokens=256, thinking_ratio=0.5, device="cuda"):
     all_completions = []
     all_contexts = []
     all_prompt_ids = []
@@ -179,12 +174,26 @@ def rollout_batch(rollout_engine, tokenizer, messages_batch, tools_batch, num_ge
             all_unfinished.append(unfinished)
     return all_completions, all_contexts, all_prompt_ids, all_response_ids, all_response_masks, all_response_old_logps, all_turn_outputs, all_unfinished
 
+
+
+
+def ______(self):
+    pass
+def collate_fn(batch):
+    return {'messages': [b['messages'] for b in batch],
+            'tools': [b['tools'] for b in batch],
+            'gt': [b['gt'] for b in batch]}
+def ________(self):
+    pass
 # ======== Reward 计算 ========
 def validate_gt_in_text(text, gt_list):
     text, text_num = str(text), str(text).replace(',', '')
     nums = [float(x) for x in re.findall(r'(?<![\w.])[-+]?\d+(?:\.\d+)?(?![\w.])', text_num)]
     return {g for g in gt_list if ((s := str(g).strip()) and s.lower() in text.lower()) or (re.fullmatch(r'[-+]?\d+(?:\.\d+)?', str(g).strip().replace(',', '')) and any(abs(float(str(g).strip().replace(',', '')) - n) < 1e-6 for n in nums))}
-
+def rep_penalty(text, n=3, cap=0.5):
+    toks = re.findall(r"\w+|[^\w\s]", text.lower())
+    grams = [tuple(toks[i:i + n]) for i in range(len(toks) - n + 1)]
+    return min(cap, (len(grams) - len(set(grams))) * cap * 2 / len(grams)) if grams else 0.0
 def calculate_rewards(prompts, completions, gt_batch, tools_batch, num_gen, reward_model=None, device="cuda", turn_outputs_batch=None, unfinished_batch=None):
     rewards = torch.zeros(len(completions), device=device)
     for idx, response in enumerate(completions):
@@ -197,7 +206,8 @@ def calculate_rewards(prompts, completions, gt_batch, tools_batch, num_gen, rewa
         answer = turn_answers[-1] if turn_answers else response.strip()
         valid_names = {t['function']['name'] for t in tools} if tools else set()
         tool_calls = []
-        for turn_answer in turn_answers: tool_calls.extend(parse_tool_calls(turn_answer))  # 解析tool调用
+        for turn_answer in turn_answers:
+            tool_calls.extend(parse_tool_calls(turn_answer))#解析tool调用  ##===================================
         reward -= 0.5 * sum(abs(turn.count('<tool_call>') - turn.count('</tool_call>')) for turn in turn_answers)  # 标签扣分
         # -------- 无工具调用：格式+reward奖励 --------
         if not tool_calls:
@@ -214,7 +224,7 @@ def calculate_rewards(prompts, completions, gt_batch, tools_batch, num_gen, rewa
                 messages = [{"role": role, "content": content.strip()} for role, content in matches]
                 score = reward_model.get_score(messages, answer)
                 reward += score  # RM分
-            reward -= rep_penalty(answer)
+            reward -= rep_penalty(answer)##===================================
             rewards[idx] = max(min(reward, 3.0), -3.0)  # 总分Clip
         # -------- 有工具调用：执行结果奖励 --------
         else:
@@ -225,19 +235,18 @@ def calculate_rewards(prompts, completions, gt_batch, tools_batch, num_gen, rewa
                 if isinstance(raw, str):
                     try: raw = json.loads(raw)
                     except: raw = {}
-                check = CHECK_ARGS.get(name)
+                check = CHECK_ARGS.get(name)##===================================
                 valid_call_count += int(bool(name in valid_names and check and check(raw)))
             tool_gap = abs(valid_call_count - len(gt)) + max(0, len(tool_calls) - valid_call_count)  # tool数差值
             reward += 0.5 if tool_gap == 0 else -0.5 * tool_gap  # tool对齐分
             
             final_text = "" if unfinished else (answer.split('</tool_call>')[-1] if '</tool_call>' in answer else answer)
-            verified = validate_gt_in_text(final_text, gt) if gt else set()
+            verified = validate_gt_in_text(final_text, gt) if gt else set()##===================================
             if gt: reward += 2.5 * len(verified) / len(gt)  # GT分
             if unfinished: reward -= 0.5  # 未完成扣分
-            reward -= rep_penalty(final_text if final_text else answer)
+            reward -= rep_penalty(final_text if final_text else answer)##===================================
             rewards[idx] = max(min(reward, 3.0), -3.0)  # 总分Clip
     return rewards
-
 # ================================ 工具与 Reward = End ================================
 def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model=None, start_step=0, wandb=None, use_sglang=False):
     last_step = start_step
@@ -248,6 +257,14 @@ def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model
         last_step = step
 
         with torch.no_grad():
+            # all_completions.append(completion)
+            # all_contexts.append(context)
+            # all_prompt_ids.append(prompt_ids)
+            # all_response_ids.append(response_ids)
+            # all_response_masks.append(response_mask)
+            # all_response_old_logps.append(response_old_logps)
+            # all_turn_outputs.append(turn_outputs)
+            # all_unfinished.append(unfinished)
             completions, contexts, prompt_ids_batch, response_ids_batch, response_masks_batch, response_old_logps_batch, turn_outputs_batch, unfinished_batch = rollout_batch(rollout_engine, tokenizer, messages_batch, tools_batch, args.num_generations, max_turns=3, max_new_tokens=args.max_gen_len, thinking_ratio=args.thinking_ratio, device=args.device)
 
         prompts = [tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=True, tools=t) for m, t in zip(messages_batch, tools_batch)]
@@ -270,7 +287,12 @@ def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model
         old_per_token_logps = torch.tensor([old_logps + [0.0] * ((max_len - 1) - len(old_logps)) for _, _, _, old_logps in packed_samples], device=args.device, dtype=torch.float32)
         full_mask = (input_ids != tokenizer.pad_token_id).long()
 
-        rewards = calculate_rewards(prompts, completions, gt_batch, tools_batch, args.num_generations, reward_model, device=args.device, turn_outputs_batch=turn_outputs_batch, unfinished_batch=unfinished_batch)
+
+
+
+        rewards = calculate_rewards(prompts, completions, gt_batch, tools_batch, args.num_generations, reward_model, device=args.device,
+                                    turn_outputs_batch=turn_outputs_batch,
+                                    unfinished_batch=unfinished_batch)
 
         model_unwrapped = model.module if isinstance(model, DistributedDataParallel) else model
         with autocast_ctx:
@@ -373,8 +395,8 @@ def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MiniMind Agent RL")
-    parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")
-    parser.add_argument('--save_weight', default='agent', type=str, help="保存权重名称")
+    parser.add_argument("--save_dir", type=str, default="../out", help="模型保存目录")##===================================
+    parser.add_argument('--save_weight', default='agent', type=str, help="保存权重名称")##===================================
     parser.add_argument("--epochs", type=int, default=1, help="训练轮数")
     parser.add_argument("--batch_size", type=int, default=2, help="批次大小")
     parser.add_argument("--learning_rate", type=float, default=3e-7, help="学习率")
@@ -387,25 +409,29 @@ if __name__ == "__main__":
     parser.add_argument("--save_interval", type=int, default=10, help="模型保存间隔")
     parser.add_argument('--hidden_size', default=768, type=int, help="模型隐藏层维度")
     parser.add_argument('--num_hidden_layers', default=8, type=int, help="模型层数")
-    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE")
-    parser.add_argument('--max_seq_len', default=1024, type=int, help="最大序列长度")
-    parser.add_argument("--max_gen_len", type=int, default=768, help="单次最大生成长度")
-    parser.add_argument("--max_total_len", type=int, default=2500, help="训练侧最终总长度上界")
-    parser.add_argument("--data_path", type=str, default="../dataset/agent_rl.jsonl", help="训练数据路径")
-    parser.add_argument("--num_generations", type=int, default=4, help="每个prompt生成数量")
-    parser.add_argument("--beta", type=float, default=0.1, help="KL散度惩罚系数")
-    parser.add_argument("--loss_type", type=str, default="cispo", choices=["grpo", "cispo"], help="loss类型")
+
+    parser.add_argument('--use_moe', default=0, type=int, choices=[0, 1], help="是否使用MoE")##===================================
+    parser.add_argument('--max_seq_len', default=1024, type=int, help="最大序列长度")##===================================
+    parser.add_argument("--max_gen_len", type=int, default=768, help="单次最大生成长度")##===================================
+    parser.add_argument("--max_total_len", type=int, default=2500, help="训练侧最终总长度上界")##===================================
+    parser.add_argument("--data_path", type=str, default="../dataset/agent_rl.jsonl", help="训练数据路径")##===================================##===================================
+    parser.add_argument("--num_generations", type=int, default=4, help="每个prompt生成数量")##===================================
+    parser.add_argument("--beta", type=float, default=0.1, help="KL散度惩罚系数")##===================================
+    parser.add_argument("--loss_type", type=str, default="cispo", choices=["grpo", "cispo"], help="loss类型")##===================================
     parser.add_argument("--epsilon", type=float, default=0.2, help="GRPO的PPO clip epsilon")
     parser.add_argument("--epsilon_high", type=float, default=5.0, help="epsilon上界")
-    parser.add_argument('--from_weight', default='full_sft', type=str, help="加载预训练权重名称")
-    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否从checkpoint恢复")
+
+    parser.add_argument('--from_weight', default='full_sft', type=str, help="加载预训练权重名称")##===================================##===================================
+    parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否从checkpoint恢复")##===================================##===================================
     parser.add_argument("--use_wandb", action="store_true", help="是否使用wandb记录")
     parser.add_argument("--wandb_project", type=str, default="MiniMind-Agent-RL", help="wandb项目名称")
     parser.add_argument("--use_compile", default=0, type=int, choices=[0, 1], help="是否使用torch.compile")
     parser.add_argument("--debug_mode", action="store_true", help="调试模式")
     parser.add_argument("--debug_interval", type=int, default=20, help="调试日志间隔")
-    parser.add_argument("--thinking_ratio", type=float, default=0.1, help="按概率开启thinking（0.0~1.0）")
-    parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
+    parser.add_argument("--thinking_ratio", type=float, default=0.1, help="按概率开启thinking（0.0~1.0）")##===================================##===================================
+    # parser.add_argument("--reward_model_path", type=str, default="../../internlm2-1_8b-reward", help="Reward模型路径")
+    parser.add_argument("--reward_model_path", type=str, default="../internlm2-1_8b-reward", help="Reward模型路径")##===================================
+
     parser.add_argument("--rollout_engine", type=str, default="torch", choices=["torch", "sglang"], help="rollout引擎类型")
     parser.add_argument("--sglang_base_url", type=str, default="http://localhost:8998", help="SGLang服务器URL")
     parser.add_argument("--sglang_model_path", type=str, default="../model", help="SGLang tokenizer路径")
@@ -418,8 +444,8 @@ if __name__ == "__main__":
 
     os.makedirs(args.save_dir, exist_ok=True)
     lm_config = MiniMindConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers,
-                               max_seq_len=args.max_seq_len + args.max_gen_len, use_moe=bool(args.use_moe))
-    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume == 1 else None
+                               max_seq_len=args.max_seq_len + args.max_gen_len, use_moe=bool(args.use_moe))##===================================
+    ckp_data = lm_checkpoint(lm_config, weight=args.save_weight, save_dir='../checkpoints') if args.from_resume == 1 else None##===================================##===================================
 
     device_type = "cuda" if "cuda" in args.device else "cpu"
     dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float16
@@ -432,16 +458,22 @@ if __name__ == "__main__":
         resume = 'must' if wandb_id else None
         wandb.init(project=args.wandb_project, name=f"Agent-RL-E{args.epochs}-B{args.batch_size}-LR{args.learning_rate}", id=wandb_id, resume=resume)
 
-    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)
-
+    model, tokenizer = init_model(lm_config, args.from_weight, device=args.device)##===================================
+    ##
+    ##
     ref_model, _ = init_model(lm_config, args.from_weight, device=args.device)
     ref_model = ref_model.eval().requires_grad_(False)
-
+    ##
+    ##
     reward_model = LMForRewardModel(args.reward_model_path, device=args.device, dtype=torch.float16)
     Logger(f'Loaded reward model from {args.reward_model_path}')
+
+
+
+
     # Rollout引擎
     rollout_engine = create_rollout_engine(
-        engine_type=args.rollout_engine,
+        engine_type=args.rollout_engine,#["torch", "sglang"]
         policy_model=model,
         tokenizer=tokenizer,
         device=args.device,
@@ -450,10 +482,17 @@ if __name__ == "__main__":
         sglang_model_path=args.sglang_model_path,
         sglang_shared_path=args.sglang_shared_path,
     )
+
+
+
+
     train_ds = AgentRLDataset(args.data_path, tokenizer, max_length=lm_config.max_seq_len)
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
+
+
+
+
     optimizer = optim.AdamW(model.parameters(), lr=args.learning_rate)
-    def collate_fn(batch): return {'messages': [b['messages'] for b in batch], 'tools': [b['tools'] for b in batch], 'gt': [b['gt'] for b in batch]}
     loader_for_count = DataLoader(train_ds, batch_size=args.batch_size, sampler=train_sampler, collate_fn=collate_fn)
     iters = len(loader_for_count)
     total_optimizer_steps = math.ceil(iters / args.accumulation_steps) * args.epochs
@@ -470,10 +509,10 @@ if __name__ == "__main__":
     if args.use_compile == 1:
         model = torch.compile(model)
         Logger('torch.compile enabled')
-        rollout_engine.update_policy(model)
+        rollout_engine.update_policy(model)##===================================##===================================##===================================##===================================
     if dist.is_initialized():
         model = DistributedDataParallel(model, device_ids=[local_rank])
-    rollout_engine.update_policy(model)
+    rollout_engine.update_policy(model)##===================================##===================================##===================================##===================================
 
     for epoch in range(start_epoch, args.epochs):
         train_sampler and train_sampler.set_epoch(epoch)
@@ -486,5 +525,5 @@ if __name__ == "__main__":
             rl_train_epoch(epoch, loader, len(loader) + skip, rollout_engine, ref_model, reward_model, start_step, wandb, use_sglang = (args.rollout_engine == "sglang"))
         else:
             rl_train_epoch(epoch, loader, len(loader), rollout_engine, ref_model, reward_model, 0, wandb, use_sglang = (args.rollout_engine == "sglang"))
-
     if dist.is_initialized(): dist.destroy_process_group()
+
