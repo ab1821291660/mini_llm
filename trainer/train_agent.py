@@ -254,8 +254,10 @@ def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model
         messages_batch = batch['messages']
         tools_batch = batch['tools']
         gt_batch = batch['gt']
-        last_step = step
 
+
+
+        last_step = step
         with torch.no_grad():
             # all_completions.append(completion)
             # all_contexts.append(context)
@@ -265,7 +267,7 @@ def rl_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_model
             # all_response_old_logps.append(response_old_logps)
             # all_turn_outputs.append(turn_outputs)
             # all_unfinished.append(unfinished)
-            completions, contexts, prompt_ids_batch, response_ids_batch, response_masks_batch, response_old_logps_batch, turn_outputs_batch, unfinished_batch = rollout_batch(rollout_engine, tokenizer, messages_batch, tools_batch, args.num_generations, max_turns=3, max_new_tokens=args.max_gen_len, thinking_ratio=args.thinking_ratio, device=args.device)
+            completions, contexts, prompt_ids_batch, response_ids_batch, response_masks_batch, response_old_logps_batch,    turn_outputs_batch, unfinished_batch = rollout_batch(rollout_engine, tokenizer, messages_batch, tools_batch, args.num_generations, max_turns=3, max_new_tokens=args.max_gen_len, thinking_ratio=args.thinking_ratio, device=args.device)
 
         prompts = [tokenizer.apply_chat_template(m, tokenize=False, add_generation_prompt=True, tools=t) for m, t in zip(messages_batch, tools_batch)]
         packed_samples = []
@@ -486,7 +488,7 @@ if __name__ == "__main__":
 
 
 
-    train_ds = AgentRLDataset(args.data_path, tokenizer, max_length=lm_config.max_seq_len)
+    train_ds = AgentRLDataset(args.data_path, tokenizer, max_length=lm_config.max_seq_len)#1024
     train_sampler = DistributedSampler(train_ds) if dist.is_initialized() else None
 
 
@@ -526,4 +528,6 @@ if __name__ == "__main__":
         else:
             rl_train_epoch(epoch, loader, len(loader), rollout_engine, ref_model, reward_model, 0, wandb, use_sglang = (args.rollout_engine == "sglang"))
     if dist.is_initialized(): dist.destroy_process_group()
+# Epoch:[1/1](1/19994), Reward:-1.5073, KL:0.0007, GrpStd:0.3203, AdvStd:1.0685, Loss:0.0578, AvgLen:353.75, AdvMean:-0.0000, LR:0.00000030
+# Epoch:[1/1](2/19994), Reward:-0.2018, KL:0.0009, GrpStd:0.6268, AdvStd:1.0689, Loss:0.0430, AvgLen:163.25, AdvMean:0.0000, LR:0.00000030
 
