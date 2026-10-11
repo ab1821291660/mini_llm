@@ -77,6 +77,7 @@ def main():
 
     print("========start========")
     start = time.time()
+    print(start)
     # # 模拟耗时操作
     # time.sleep(1.5)
     # input_mode = int(input('[0] 自动测试\n[1] 手动输入\n'))
@@ -113,8 +114,9 @@ def main():
         gen_tokens = len(generated_ids[0]) - len(inputs["input_ids"][0])
         print(f'\n[Speed]: {gen_tokens / (time.time() - st):.2f} tokens/s\n\n') if args.show_speed else print('\n\n')
     end = time.time()
+    print(end)
     diff = end - start
-    print(f"耗时: {diff:.2f} 秒")
+    print(f"耗时: {diff:.2f} 秒")#耗时: 285.95 秒
 if __name__ == "__main__":
     main()
 

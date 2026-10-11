@@ -196,7 +196,7 @@ def grpo_train_epoch(epoch, loader, iters, rollout_engine, ref_model, reward_mod
         # else:#cispo
         if args.loss_type == "cispo":
             clamped_ratio = torch.clamp(ratio, max=args.epsilon_high).detach()#b2*6-1024
-            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps
+            per_token_loss = -(clamped_ratio * advantages.unsqueeze(1) * per_token_logps ##===================================##===================================##===================================
                                - args.beta * per_token_kl)#b2*6-1024##===================================
         # else:#grpo
         # else:#grpo
