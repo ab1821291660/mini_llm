@@ -174,8 +174,8 @@ if __name__ == "__main__":
     parser.add_argument('--student_num_layers', default=8, type=int, help="学生模型隐藏层数量")
     parser.add_argument('--teacher_hidden_size', default=768, type=int, help="教师模型隐藏层维度")
     parser.add_argument('--teacher_num_layers', default=8, type=int, help="教师模型隐藏层数量")
-    parser.add_argument('--student_use_moe', default=0, type=int, choices=[0, 1], help="学生模型是否使用MoE（0=否，1=是）")##===================================
-    parser.add_argument('--teacher_use_moe', default=1, type=int, choices=[0, 1], help="教师模型是否使用MoE（0=否，1=是）")##===================================
+    parser.add_argument('--student_use_moe', default=0, type=int, choices=[0, 1], help="学生模型是否使用MoE（0=否，1=是）")##===================================##===================================
+    parser.add_argument('--teacher_use_moe', default=1, type=int, choices=[0, 1], help="教师模型是否使用MoE（0=否，1=是）")##===================================##===================================
     parser.add_argument('--from_student_weight', default='full_sft', type=str, help="学生模型基于哪个权重")##===================================
     parser.add_argument('--from_teacher_weight', default='full_sft', type=str, help="教师模型基于哪个权重")##===================================
     parser.add_argument('--from_resume', default=0, type=int, choices=[0, 1], help="是否自动检测&续训（0=否，1=是）")
@@ -255,6 +255,19 @@ if __name__ == "__main__":
             train_epoch(epoch, loader, len(loader),         teacher_model, lm_config_student, 0,          wandb, args.alpha, args.temperature)
     # ========== 9. 清理分布进程 ==========
     if dist.is_initialized(): dist.destroy_process_group()
+
+
+# D:\anaconda3\python.exe D:\github\mini_llm\trainer\train_distillation白盒蒸馏ok.py
+# Model Params: 63.91M
+# Trainable Params: 63.912M
+# 学生模型总参数量：63.912 M
+# Model Params: 198.42M-A63.94M
+# Trainable Params: 198.417M
+# 教师模型总参数量：198.417 M
+# Generating train split: 905718 examples [00:13, 66328.93 examples/s]
+# Epoch:[1/6](100/28304), loss: 1.0362, ce: 1.4189, aux_loss: 0.0000, distill: 0.6535, learning_rate: 0.00000500, epoch_time: 1572.000min
+# Epoch:[1/6](200/28304), loss: 1.1024, ce: 1.5222, aux_loss: 0.0000, distill: 0.6827, learning_rate: 0.00000500, epoch_time: 868.000min
+# Epoch:[1/6](300/28304), loss: 1.0208, ce: 1.3747, aux_loss: 0.0000, distill: 0.6668, learning_rate: 0.00000500, epoch_time: 634.000min
 
 
 

@@ -21,8 +21,8 @@ def init_model(args):
         ckp = f'./{args.save_dir}/{args.weight}_{args.hidden_size}{moe_suffix}.pth'
         model.load_state_dict(torch.load(ckp, map_location=args.device), strict=True)
         if args.lora_weight != 'None':
-            apply_lora(model)
-            load_lora(model, f'./{args.save_dir}/{args.lora_weight}_{args.hidden_size}.pth')
+            apply_lora(model)##===================================
+            load_lora(model, f'./{args.save_dir}/{args.lora_weight}_{args.hidden_size}.pth')##===================================
     else:##===================================##===================================##===================================##===================================
         model = AutoModelForCausalLM.from_pretrained(args.load_from, trust_remote_code=True)
     get_model_params(model, model.config)##========
@@ -30,17 +30,17 @@ def init_model(args):
 
 def main():
     parser = argparse.ArgumentParser(description="MiniMind模型推理与对话")
-    # parser.add_argument('--load_from', default='./minimind-3-moe', type=str, help="模型加载路径（model=原生torch权重，其他路径=transformers格式）")##===================================
+    # parser.add_argument('--load_from', default='./minimind-3-moe', type=str, help="模型加载路径（model=原生torch权重，其他路径=transformers格式）")##===================================##===================================##===================================##===================================
 
 
 
     parser.add_argument('--load_from', default='model', type=str, help="模型加载路径（model=原生torch权重，其他路径=transformers格式）")##===================================
     parser.add_argument('--save_dir', default='out', type=str, help="模型权重目录")
-    parser.add_argument('--weight', default='full_sft', type=str, help="权重名称前缀（pretrain, full_sft, grpo,dpo,agent         rlhf, reason, ppo_actor, spo）")
+    parser.add_argument('--weight', default='full_sft', type=str, help="权重名称前缀（pretrain, full_sft, grpo,dpo,agent         rlhf, reason, ppo_actor, spo）")##===================================##===================================##===================================##===================================
 
 
 
-    parser.add_argument('--lora_weight', default='lora_medical', type=str, help="LoRA权重名称（None表示不使用，可选：lora_identity, lora_medical）")
+    parser.add_argument('--lora_weight', default='lora_medical', type=str, help="LoRA权重名称（None表示不使用，可选：lora_identity, lora_medical）")##===================================##===================================##===================================##===================================
     # parser.add_argument('--lora_weight', default='None', type=str, help="LoRA权重名称（None表示不使用，可选：lora_identity, lora_medical）")
 
 
@@ -52,7 +52,7 @@ def main():
     parser.add_argument('--max_new_tokens', default=8192, type=int, help="最大生成长度（注意：并非模型实际长文本能力）")
     parser.add_argument('--temperature', default=0.85, type=float, help="生成温度，控制随机性（0-1，越大越随机）")
     parser.add_argument('--top_p', default=0.95, type=float, help="nucleus采样阈值（0-1）")
-    parser.add_argument('--open_thinking', default=0, type=int, help="是否开启自适应思考（0=否，1=是）")##===================================
+    parser.add_argument('--open_thinking', default=0, type=int, help="是否开启自适应思考（0=否，1=是）")##===================================##===================================##===================================##===================================
     parser.add_argument('--historys', default=0, type=int, help="携带历史对话轮数（需为偶数，0表示不携带历史）")##===================================
     parser.add_argument('--show_speed', default=1, type=int, help="显示decode速度（tokens/s）")##===================================
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu', type=str, help="运行设备")
@@ -70,17 +70,23 @@ def main():
 
 
 
+
     conversation = []
     model, tokenizer = init_model(args)
 
 
-
-    input_mode = int(input('[0] 自动测试\n[1] 手动输入\n'))
+    print("========start========")
+    start = time.time()
+    # # 模拟耗时操作
+    # time.sleep(1.5)
+    # input_mode = int(input('[0] 自动测试\n[1] 手动输入\n'))
+    input_mode = 0 ##===================================
     streamer = TextStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-    prompt_iter = prompts if input_mode == 0 else iter(lambda: input('💬: '), '')
+    prompt_iter = prompts if input_mode == 0    else iter(lambda: input('💬: '), '')
     for prompt in prompt_iter:
         setup_seed(random.randint(0, 31415926))
-        if input_mode == 0: print(f'💬: {prompt}')
+        if input_mode == 0:
+            print(f'💬: {prompt}')
         conversation = conversation[-args.historys:] if args.historys else []##args.historys=0##===================================
         conversation.append({"role": "user", "content": prompt})
         if 'pretrain' in args.weight:
@@ -91,7 +97,6 @@ def main():
         # if args.weight == 'reason': templates["enable_thinking"] = True # 仅Reason模型使用
         # inputs = tokenizer.apply_chat_template(**templates) if args.weight != 'pretrain' else (tokenizer.bos_token + prompt)
         inputs = tokenizer(inputs, return_tensors="pt", truncation=True).to(args.device)
-
 
 
         print('🧠: ', end='')
@@ -107,6 +112,10 @@ def main():
         conversation.append({"role": "assistant", "content": response})
         gen_tokens = len(generated_ids[0]) - len(inputs["input_ids"][0])
         print(f'\n[Speed]: {gen_tokens / (time.time() - st):.2f} tokens/s\n\n') if args.show_speed else print('\n\n')
+    end = time.time()
+    diff = end - start
+    print(f"耗时: {diff:.2f} 秒")
 if __name__ == "__main__":
     main()
+
 

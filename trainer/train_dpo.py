@@ -37,7 +37,7 @@ def dpo_loss(ref_log_probs, policy_log_probs, mask, beta):#4*2-1023  #4*2-1023  
     policy_log_probs = (policy_log_probs * mask).sum(dim=1)#4*2=8
 
     # 将 chosen 和 rejected 数据分开
-    batch_size = ref_log_probs.shape[0]
+    batch_size = ref_log_probs.shape[0]#4*2=8
     chosen_ref_log_probs = ref_log_probs[:batch_size // 2]#4 ##===================================
     reject_ref_log_probs = ref_log_probs[batch_size // 2:]#4 ##===================================
     chosen_policy_log_probs = policy_log_probs[:batch_size // 2]#4 ##===================================
@@ -45,7 +45,7 @@ def dpo_loss(ref_log_probs, policy_log_probs, mask, beta):#4*2-1023  #4*2-1023  
 
     pi_logratios = chosen_policy_log_probs - reject_policy_log_probs#4
     ref_logratios = chosen_ref_log_probs - reject_ref_log_probs#4
-    logits = pi_logratios - ref_logratios
+    logits = pi_logratios - ref_logratios#4
     loss = -F.logsigmoid(beta * logits)#4
     return loss.mean()#1
 
