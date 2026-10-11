@@ -69,7 +69,7 @@ def train_epoch(epoch, loader, iters, start_step=0, wandb=None):
             state_dict = raw_model.state_dict()
             torch.save({k: v.half().cpu() for k, v in state_dict.items()}, ckp)
             lm_checkpoint(lm_config, weight=args.save_weight, model=model, optimizer=optimizer, 
-                         epoch=epoch, step=step, wandb=wandb, save_dir='../checkpoints', scaler=scaler)
+                         epoch=epoch, step=step, wandb=wandb, save_dir='../checkpoints', scaler=scaler)##===================================##===================================
             model.train()
             del state_dict
 
