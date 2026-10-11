@@ -257,7 +257,7 @@ if __name__ == "__main__":
     if dist.is_initialized(): dist.destroy_process_group()
 
 
-# D:\anaconda3\python.exe D:\github\mini_llm\trainer\train_distillation白盒蒸馏ok.py
+# D:\anaconda3\python.exe D:\github\mini_llm\trainer\train_distillation白盒蒸馏_同分词器ok.py
 # Model Params: 63.91M
 # Trainable Params: 63.912M
 # 学生模型总参数量：63.912 M
