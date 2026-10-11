@@ -10,6 +10,7 @@ def pre_processing_chat(conversations, add_system_ratio=0.2):
     # tool use 数据完整保留不做处理
     if any(conv.get('tools') for conv in conversations): return conversations
 
+
     SYSTEM_PROMPTS = [
         "你是一个知识丰富的AI，尽力为用户提供准确的信息。",
         "你是minimind，一个小巧但有用的语言模型。",
@@ -219,10 +220,10 @@ class RLAIFDataset(Dataset):
         return len(self.samples)
 
     def create_chat_prompt(self, conversations):
-        conversations = pre_processing_chat(conversations)##===================================
+        conversations = pre_processing_chat(conversations)##【】##===================================##===================================
         use_thinking = random.random() < self.thinking_ratio##===================================
         return self.tokenizer.apply_chat_template(
-            conversations[:-1],##===================================
+            conversations[:-1],##【】去掉answer##===================================
             tokenize=False,
             open_thinking=use_thinking,
             add_generation_prompt=True

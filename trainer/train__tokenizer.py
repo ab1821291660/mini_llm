@@ -6,7 +6,7 @@ from tokenizers import decoders, models, pre_tokenizers, trainers, Tokenizer
 
 DATA_PATH = '../dataset/sft_t2t_mini.jsonl'
 TOKENIZER_DIR = '../model_learn_tokenizer/'
-VOCAB_SIZE = 6400
+VOCAB_SIZE = 6400 ##===================================
 SPECIAL_TOKENS_NUM = 36
 
 def get_texts(data_path):
@@ -164,5 +164,40 @@ def eval_tokenizer(tokenizer_dir):
             token_cache = []
 
 if __name__ == '__main__':
-    train_tokenizer(DATA_PATH, TOKENIZER_DIR, VOCAB_SIZE)
-    eval_tokenizer(TOKENIZER_DIR)
+    train_tokenizer(DATA_PATH, TOKENIZER_DIR, VOCAB_SIZE)##===================================
+    eval_tokenizer(TOKENIZER_DIR)##===================================
+
+                ##见【王鹏】：https://zhuanlan.zhihu.com/p/2079962661261930984
+                # 实际训练的压缩率测试 ##===================================##===================================
+                # // MiniMind tokenizer 对 4 个样本的压缩率测试
+                # 样本 1（中文）: 字符数 76 → Tokens 46  → 压缩率 1.65 字符/token
+                # 样本 2（中文）: 字符数 212 → Tokens 134 → 压缩率 1.58 字符/token
+                # 样本 3（英文）: 字符数 964 → Tokens 227 → 压缩率 4.25 字符/token
+                # 样本 4（混合）: 字符数 397 → Tokens 154 → 压缩率 2.58 字符/token
+                #
+                # // 对比：Qwen2 的 151K 词表在中文上压缩率约 1.8~2.0 字符/token
+                # // MiniMind 的 6400 词表在中文上约 1.5~1.7——差距不大
+                # // 但词表大小差了 23 倍，embedding 层参数少了 23 倍
+                # 理解这个压缩率很实用：当你说训练时 max_seq_len=340，实际的文本长度大约是 340 × 1.6 ≈ 544 个中文字符。而 max_seq_len=768 则对应约 1228 个中文字符。
+                #
+                #
+                # 特殊 token 设计 ##===================================##===================================
+                # MiniMind 的词表里有 36 个特殊 token，定义了模型的所有行为边界：
+                # // ① 对话控制符（3个）
+                # <|im_start|>  <|im_end|>  <|endoftext|>
+                #
+                # // ② 工具调用标记（4个）
+                # <tool_call>  </tool_call>  <tool_response>  </tool_response>
+                #
+                # // ③ 思考标记（2个）——类似 DeepSeek-R1 的思维链
+                # <thinking>  <response>
+                #
+                # // ④ 视觉/多模态预留（8个）
+                # <|vision_start|>  <|vision_end|>  <|image_pad|>  <|video_pad|> ...
+                #
+                # // ⑤ 未来功能预留（14个 buffer token）
+                # <|buffer1|> ~ <|buffer14|>
+                # 这里有一个设计细节：为什么预留 buffer token？ 因为词表一旦训练好就没有回头路了——如果后续想加新的特殊 token，就得重新训练整个 tokenizer，这意味着模型权重也得重练。
+                # 预留 buffer token 就是为了给未来的功能扩展留下余地，这是很多项目容易忽略的"接口预留"设计。
+
+
