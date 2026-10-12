@@ -1,0 +1,5 @@
+model/__pycache__
+out
+website/
+docs-minimind/
+settings.local.json
